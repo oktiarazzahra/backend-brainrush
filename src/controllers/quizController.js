@@ -62,7 +62,7 @@ exports.createQuiz = async (req, res, next) => {
 exports.getMyQuizzes = async (req, res, next) => {
   try {
     const quizzes = await Quiz.find({ createdBy: req.userId })
-      .select('title description category status questions createdAt')
+      .select('title description category status questions createdAt coverImage')
       .sort('-createdAt');
 
     return res.status(200).json({
@@ -131,11 +131,12 @@ exports.updateQuiz = async (req, res, next) => {
       });
     }
 
-    const { title, description, category, questions } = req.body;
+    const { title, description, category, questions, coverImage } = req.body;
 
     if (title) quiz.title = title;
     if (description) quiz.description = description;
     if (category) quiz.category = category;
+    if (coverImage !== undefined) quiz.coverImage = coverImage; // Support base64 or null to remove
 
     if (questions && Array.isArray(questions)) {
       const formatQuestions = questions.map((q) => {

@@ -31,6 +31,20 @@ const upload = multer({
   }
 });
 
+// @route GET /api/quizzes/published
+// @desc Get all published quizzes
+// @access Private
+router.get('/published', protect, async (req, res) => {
+  try {
+    const quizzes = await Quiz.find({ isPublished: true })
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 });
+    res.json({ quizzes });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // @route GET /api/quizzes/my-quizzes
 // @desc Get user's quizzes
 // @access Private
@@ -133,60 +147,60 @@ router.put('/:id/unpublish', protect, async (req, res) => {
 });
 
 // @route PUT /api/quizzes/:id/cover
-// @desc Upload quiz cover image
+// @desc Upload quiz cover image (DEPRECATED - use PUT /api/quizzes/:id with coverImage field instead)
 // @access Private
-router.put('/:id/cover', protect, upload.single('cover'), async (req, res) => {
-  try {
-    const quiz = await Quiz.findById(req.params.id);
-    
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
+// router.put('/:id/cover', protect, upload.single('cover'), async (req, res) => {
+//   try {
+//     const quiz = await Quiz.findById(req.params.id);
+//     
+//     if (!quiz) {
+//       return res.status(404).json({ message: 'Quiz not found' });
+//     }
 
-    if (quiz.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized to update this quiz' });
-    }
+//     if (quiz.createdBy.toString() !== req.user._id.toString()) {
+//       return res.status(403).json({ message: 'Not authorized to update this quiz' });
+//     }
 
-    quiz.coverImage = `/uploads/covers/${req.file.filename}`;
-    await quiz.save();
+//     quiz.coverImage = `/uploads/covers/${req.file.filename}`;
+//     await quiz.save();
 
-    res.json({ 
-      message: 'Cover uploaded successfully', 
-      coverImage: quiz.coverImage 
-    });
-  } catch (error) {
-    console.error('❌ Upload cover error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
+//     res.json({ 
+//       message: 'Cover uploaded successfully', 
+//       coverImage: quiz.coverImage 
+//     });
+//   } catch (error) {
+//     console.error('❌ Upload cover error:', error);
+//     res.status(500).json({ message: 'Server error', error: error.message });
+//   }
+// });
 
 // @route DELETE /api/quizzes/:id/cover
-// @desc Delete quiz cover image
+// @desc Delete quiz cover image (DEPRECATED - use PUT /api/quizzes/:id with coverImage: null instead)
 // @access Private
-router.delete('/:id/cover', protect, async (req, res) => {
-  try {
-    const quiz = await Quiz.findById(req.params.id);
-    
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
+// router.delete('/:id/cover', protect, async (req, res) => {
+//   try {
+//     const quiz = await Quiz.findById(req.params.id);
+//     
+//     if (!quiz) {
+//       return res.status(404).json({ message: 'Quiz not found' });
+//     }
 
-    if (quiz.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized to delete this cover' });
-    }
+//     if (quiz.createdBy.toString() !== req.user._id.toString()) {
+//       return res.status(403).json({ message: 'Not authorized to delete this cover' });
+//     }
 
-    quiz.coverImage = null;
-    await quiz.save();
+//     quiz.coverImage = null;
+//     await quiz.save();
 
-    res.json({ 
-      message: 'Cover deleted successfully', 
-      coverImage: null 
-    });
-  } catch (error) {
-    console.error('❌ Delete cover error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
+//     res.json({ 
+//       message: 'Cover deleted successfully', 
+//       coverImage: null 
+//     });
+//   } catch (error) {
+//     console.error('❌ Delete cover error:', error);
+//     res.status(500).json({ message: 'Server error', error: error.message });
+//   }
+// });
 
 // @route DELETE /api/quizzes/:id
 // @desc Delete quiz

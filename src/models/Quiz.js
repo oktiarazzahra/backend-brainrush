@@ -85,6 +85,10 @@ const quizSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    coverImage: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
