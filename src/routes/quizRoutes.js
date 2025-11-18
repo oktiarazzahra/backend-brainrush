@@ -32,11 +32,14 @@ const upload = multer({
 });
 
 // @route GET /api/quizzes/published
-// @desc Get all published quizzes
+// @desc Get all published and public quizzes
 // @access Private
 router.get('/published', protect, async (req, res) => {
   try {
-    const quizzes = await Quiz.find({ isPublished: true })
+    const quizzes = await Quiz.find({ 
+      isPublished: true,
+      isPublic: true
+    })
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
     res.json({ quizzes });
@@ -50,6 +53,17 @@ router.get('/published', protect, async (req, res) => {
 // @access Private
 router.get('/my-quizzes', protect, async (req, res) => {
   try {
+    // Auto-update old published quizzes without isPublic field
+    await Quiz.updateMany(
+      { 
+        createdBy: req.user._id,
+        isPublished: true,
+        isPublic: { $exists: false }
+      },
+      { $set: { isPublic: true } }
+    );
+    
+    // Fetch updated quizzes
     const quizzes = await Quiz.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
     res.json({ quizzes });
   } catch (error) {
@@ -80,26 +94,6 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// @route PUT /api/quizzes/:id
-// @desc Update quiz
-// @access Private
-router.put('/:id', protect, async (req, res) => {
-  try {
-    const quiz = await Quiz.findById(req.params.id);
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
-    if (quiz.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
-    }
-    const updatedQuiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updatedQuiz);
-  } catch (error) {
-    console.error('❌ Update quiz error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
 // @route PUT /api/quizzes/:id/publish
 // @desc Publish quiz
 // @access Private
@@ -115,6 +109,7 @@ router.put('/:id/publish', protect, async (req, res) => {
     quiz.isDraft = false;
     quiz.isPublished = true;
     quiz.status = 'published';
+    quiz.isPublic = true; // Auto set to public when published
     await quiz.save();
     res.json({ message: 'Quiz published successfully', quiz });
   } catch (error) {
@@ -138,10 +133,53 @@ router.put('/:id/unpublish', protect, async (req, res) => {
     quiz.isDraft = true;
     quiz.isPublished = false;
     quiz.status = 'draft';
+    quiz.isPublic = false; // Auto set to private when unpublished
     await quiz.save();
     res.json({ message: 'Quiz unpublished successfully', quiz });
   } catch (error) {
     console.error('❌ Unpublish quiz error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route PUT /api/quizzes/:id/public
+// @desc Set quiz as public
+// @access Private
+router.put('/:id/public', protect, async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+    if (quiz.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    quiz.isPublic = true;
+    await quiz.save();
+    res.json({ message: 'Quiz set to public successfully', quiz });
+  } catch (error) {
+    console.error('❌ Set public error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route PUT /api/quizzes/:id/private
+// @desc Set quiz as private
+// @access Private
+router.put('/:id/private', protect, async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+    if (quiz.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    quiz.isPublic = false;
+    await quiz.save();
+    res.json({ message: 'Quiz set to private successfully', quiz });
+  } catch (error) {
+    console.error('❌ Set private error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -201,6 +239,26 @@ router.put('/:id/unpublish', protect, async (req, res) => {
 //     res.status(500).json({ message: 'Server error', error: error.message });
 //   }
 // });
+
+// @route PUT /api/quizzes/:id
+// @desc Update quiz
+// @access Private
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+    if (quiz.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    const updatedQuiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updatedQuiz);
+  } catch (error) {
+    console.error('❌ Update quiz error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 // @route DELETE /api/quizzes/:id
 // @desc Delete quiz

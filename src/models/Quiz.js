@@ -89,6 +89,10 @@ const quizSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    isPublic: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
