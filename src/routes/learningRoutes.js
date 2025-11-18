@@ -1,5 +1,5 @@
 const express = require('express');
-const authMiddleware = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');
 const {
   startLearning,
   submitLearning,
@@ -11,7 +11,7 @@ const {
 const router = express.Router();
 
 // All routes are protected
-router.use(authMiddleware);
+router.use(protect);
 
 router.post('/start/:quizId', startLearning);
 router.post('/submit', submitLearning);

@@ -3,6 +3,8 @@ const cors = require('cors');
 const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const quizRoutes = require('./routes/quizRoutes');
+const learningRoutes = require('./routes/learningRoutes');
+const gameRoutes = require('./routes/gameRoutes');
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/learning', learningRoutes);
+app.use('/api/game', gameRoutes);
 
 // Health check
 app.get('/', (req, res) => {

@@ -2,7 +2,7 @@ const Quiz = require('../models/Quiz');
 
 exports.createQuiz = async (req, res, next) => {
   try {
-    const { title, description, category, questions } = req.body;
+    const { title, description, category, questions, timerMode, totalTime } = req.body;
 
     if (!title || !questions || questions.length === 0) {
       return res.status(400).json({
@@ -28,6 +28,8 @@ exports.createQuiz = async (req, res, next) => {
         correctAnswer: q.correctAnswer || null,
         acceptedAnswers: q.acceptedAnswers || [],
         timeLimit: q.timeLimit || 30,
+        explanation: q.explanation || '',
+        points: q.points || 1,
         imageData: q.imageData || null,  // ← NEW: Base64 image
         imageName: q.imageName || null,  // ← NEW: Filename
       };
@@ -39,7 +41,9 @@ exports.createQuiz = async (req, res, next) => {
       category: category || 'Umum',
       createdBy: req.userId,
       status: 'draft',
-      questions: formatQuestions
+      questions: formatQuestions,
+      timerMode: timerMode || 'per-question',
+      totalTime: totalTime || null
     });
 
     await quiz.save();
@@ -154,6 +158,8 @@ exports.updateQuiz = async (req, res, next) => {
           correctAnswer: q.correctAnswer || null,
           acceptedAnswers: q.acceptedAnswers || [],
           timeLimit: q.timeLimit || 30,
+          explanation: q.explanation || '',
+          points: q.points || 1,
           imageData: q.imageData || null,  // ← NEW: Base64 image
           imageName: q.imageName || null,  // ← NEW: Filename
         };

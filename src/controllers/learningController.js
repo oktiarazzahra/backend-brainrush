@@ -63,6 +63,8 @@ exports.submitLearning = async (req, res, next) => {
   try {
     const { quizId, answers } = req.body;
 
+    console.log('📥 Received submission:', { quizId, answersCount: answers?.length, userId: req.userId });
+
     if (!quizId || !answers) {
       return res.status(400).json({
         status: 'error',
@@ -70,8 +72,7 @@ exports.submitLearning = async (req, res, next) => {
       });
     }
 
-    const quiz = await Quiz.findById(quizId)
-      .populate('questions');
+    const quiz = await Quiz.findById(quizId);
 
     if (!quiz) {
       return res.status(404).json({
@@ -80,21 +81,84 @@ exports.submitLearning = async (req, res, next) => {
       });
     }
 
+    console.log('✅ Quiz found:', quiz.title);
+    console.log('📊 Quiz has', quiz.questions.length, 'questions (embedded)');
+
     // Calculate score
     let totalScore = 0;
     let correctAnswers = 0;
     const answersDetails = [];
+
+    console.log('📝 Processing answers for quiz:', quizId);
+    console.log('📊 Total questions:', quiz.questions.length);
+    console.log('📋 Answers received:', answers.length);
 
     for (const answer of answers) {
       const question = quiz.questions.find(q => 
         q._id.toString() === answer.questionId
       );
 
-      if (!question) continue;
+      if (!question) {
+        console.warn('⚠️ Question not found for ID:', answer.questionId);
+        continue;
+      }
 
-      const isCorrect = question.correctAnswer === answer.answer;
+      let isCorrect = false;
+      
+      // Normalize question type
+      const questionType = question.questionType;
+      
+      console.log(`\n🔍 Checking question:`, {
+        questionId: question._id,
+        questionType: questionType,
+        correctAnswer: question.correctAnswer,
+        userAnswer: answer.answer
+      });
+      
+      // Check answer based on question type
+      if (questionType === 'multiple-choice' || questionType === 'multiple-answer' || questionType === 'Pilihan Ganda') {
+        // For multiple choice/answer questions
+        const correctAnswer = Array.isArray(question.correctAnswer) ? question.correctAnswer : [question.correctAnswer];
+        const userAnswer = Array.isArray(answer.answer) ? answer.answer : [answer.answer];
+        
+        // Sort arrays for comparison
+        const sortedCorrect = [...correctAnswer].sort();
+        const sortedUser = [...userAnswer].sort();
+        
+        console.log('Comparing arrays:', { sortedCorrect, sortedUser });
+        
+        isCorrect = JSON.stringify(sortedCorrect) === JSON.stringify(sortedUser);
+      } else if (questionType === 'true-false' || questionType === 'Benar Salah') {
+        // For true/false questions - handle both string and boolean
+        console.log('Comparing bool:', { correct: question.correctAnswer, user: answer.answer, types: [typeof question.correctAnswer, typeof answer.answer] });
+        
+        // Convert to boolean for comparison
+        const correctBool = question.correctAnswer === true || question.correctAnswer === 'true';
+        const userBool = answer.answer === true || answer.answer === 'true';
+        
+        console.log('After conversion:', { correctBool, userBool });
+        
+        isCorrect = correctBool === userBool;
+      } else if (questionType === 'short-answer' || questionType === 'Isian') {
+        // For short answer questions - case insensitive
+        const acceptedAnswers = question.acceptedAnswers || [];
+        const userAnswerLower = (answer.answer || '').toString().toLowerCase().trim();
+        
+        console.log('Comparing text:', { acceptedAnswers, userAnswerLower });
+        
+        isCorrect = acceptedAnswers.some(accepted => 
+          accepted.toLowerCase().trim() === userAnswerLower
+        );
+      } else {
+        // Default comparison
+        console.log('Default comparison:', { correct: question.correctAnswer, user: answer.answer });
+        isCorrect = question.correctAnswer === answer.answer;
+      }
+
+      console.log(`${isCorrect ? '✅' : '❌'} Answer is ${isCorrect ? 'CORRECT' : 'WRONG'}`);
+
       if (isCorrect) {
-        totalScore += question.points;
+        totalScore += (question.points || 1);
         correctAnswers += 1;
       }
 
@@ -106,9 +170,13 @@ exports.submitLearning = async (req, res, next) => {
       });
     }
 
-    const totalPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
+    const totalPoints = quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+
+    console.log('📊 Final score:', totalScore, '/', totalPoints);
+    console.log('📊 Correct answers:', correctAnswers, '/', quiz.questions.length);
 
     // Save to PlayerScore
+    console.log('💾 Saving to database...');
     const playerScore = await PlayerScore.create({
       userId: req.userId,
       quizId,
@@ -117,6 +185,8 @@ exports.submitLearning = async (req, res, next) => {
       totalPoints,
       answers: answersDetails
     });
+
+    console.log('✅ Saved successfully with ID:', playerScore._id);
 
     res.status(201).json({
       status: 'success',
@@ -138,6 +208,8 @@ exports.submitLearning = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('❌ Error in submitLearning:', error);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -185,49 +257,70 @@ exports.getLearningHistory = async (req, res, next) => {
 // @access  Private
 exports.getLearningResult = async (req, res, next) => {
   try {
+    console.log('📥 Fetching learning result for scoreId:', req.params.scoreId);
+
     const playerScore = await PlayerScore.findById(req.params.scoreId)
-      .populate('quizId')
-      .populate({
-        path: 'answers.questionId',
-        model: 'Question'
-      });
+      .populate('quizId');
 
     if (!playerScore) {
+      console.log('❌ PlayerScore not found');
       return res.status(404).json({
         status: 'error',
         message: 'Result not found'
       });
     }
 
+    console.log('✅ PlayerScore found');
+
     // Check ownership
     if (playerScore.userId.toString() !== req.userId) {
+      console.log('❌ Not authorized - userId mismatch');
       return res.status(403).json({
         status: 'error',
         message: 'Not authorized'
       });
     }
 
-    // Build detailed result with explanations
-    const quiz = await Quiz.findById(playerScore.quizId)
-      .populate('questions');
+    // Get quiz with embedded questions
+    const quiz = await Quiz.findById(playerScore.quizId);
+
+    if (!quiz) {
+      console.log('❌ Quiz not found');
+      return res.status(404).json({
+        status: 'error',
+        message: 'Quiz not found'
+      });
+    }
+
+    console.log('✅ Quiz found:', quiz.title);
+    console.log('📊 Building detailed answers...');
 
     const detailedAnswers = playerScore.answers.map((answer, index) => {
+      // Find question from embedded quiz.questions array
       const question = quiz.questions.find(q => 
-        q._id.toString() === answer.questionId._id.toString()
+        q._id.toString() === answer.questionId.toString()
       );
+
+      if (!question) {
+        console.warn('⚠️ Question not found for ID:', answer.questionId);
+        return null;
+      }
 
       return {
         questionNumber: index + 1,
-        questionText: question.questionText,
+        questionText: question.question, // Use 'question' not 'questionText'
         questionType: question.questionType,
         userAnswer: answer.userAnswer,
         correctAnswer: question.correctAnswer,
+        acceptedAnswers: question.acceptedAnswers || [], // For short answer questions
         isCorrect: answer.isCorrect,
-        explanation: question.explanation,
-        points: question.points,
-        options: question.options
+        explanation: question.explanation || 'Tidak ada penjelasan.',
+        points: question.points || 1,
+        options: question.options || []
       };
-    });
+    }).filter(a => a !== null); // Remove null entries
+
+    console.log('✅ Built', detailedAnswers.length, 'detailed answers');
 
     res.status(200).json({
       status: 'success',
@@ -245,6 +338,8 @@ exports.getLearningResult = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('❌ Error in getLearningResult:', error);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: error.message

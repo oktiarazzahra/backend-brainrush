@@ -1,5 +1,5 @@
 const express = require('express');
-const authMiddleware = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');
 const {
   createLiveGame,
   joinGame,
@@ -14,7 +14,7 @@ const {
 const router = express.Router();
 
 // All routes are protected
-router.use(authMiddleware);
+router.use(protect);
 
 router.post('/', createLiveGame);
 router.post('/join', joinGame);

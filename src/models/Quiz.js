@@ -48,6 +48,14 @@ const quizSchema = new mongoose.Schema(
           type: Number,
           default: 30,
         },
+        explanation: {
+          type: String,
+          default: '',
+        },
+        points: {
+          type: Number,
+          default: 1,
+        },
         // ← NEW: Image fields (Base64)
         imageData: {
           type: String,
@@ -92,6 +100,15 @@ const quizSchema = new mongoose.Schema(
     isPublic: {
       type: Boolean,
       default: false,
+    },
+    timerMode: {
+      type: String,
+      enum: ['none', 'per-question', 'total-time'],
+      default: 'per-question',
+    },
+    totalTime: {
+      type: Number,
+      default: null, // Total time in seconds for 'total-time' mode
     },
   },
   {

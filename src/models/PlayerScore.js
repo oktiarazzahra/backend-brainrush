@@ -26,7 +26,7 @@ const playerScoreSchema = new mongoose.Schema({
   },
   answers: [{
     questionId: mongoose.Schema.Types.ObjectId,
-    userAnswer: String,
+    userAnswer: mongoose.Schema.Types.Mixed, // Can be String, Number, Boolean, or Array
     isCorrect: Boolean,
     timeSpent: Number
   }],

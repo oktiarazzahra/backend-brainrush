@@ -20,6 +20,9 @@ const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'User not found' });
       }
 
+      // Also set req.userId for controllers
+      req.userId = req.user._id.toString();
+
       next();
     } catch (error) {
       console.error('❌ Auth middleware error:', error.message);
