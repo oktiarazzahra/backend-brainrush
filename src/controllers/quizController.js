@@ -4,6 +4,15 @@ exports.createQuiz = async (req, res, next) => {
   try {
     const { title, description, category, questions, timerMode, totalTime } = req.body;
 
+    console.log('📥 Received create quiz request:', {
+      title,
+      category,
+      timerMode,
+      totalTime,
+      timerModeType: typeof timerMode,
+      totalTimeType: typeof totalTime
+    });
+
     if (!title || !questions || questions.length === 0) {
       return res.status(400).json({
         success: false,
@@ -42,16 +51,31 @@ exports.createQuiz = async (req, res, next) => {
       createdBy: req.userId,
       status: 'draft',
       questions: formatQuestions,
-      timerMode: timerMode || 'per-question',
-      totalTime: totalTime || null
+      timerMode: timerMode && timerMode.trim() !== '' ? timerMode : 'per-question',
+      totalTime: totalTime !== null && totalTime !== undefined ? totalTime : null
     });
 
-    await quiz.save();
+    console.log('📝 Creating quiz with timer settings:', {
+      timerMode: quiz.timerMode,
+      totalTime: quiz.totalTime,
+      status: quiz.status,
+      isDraft: quiz.isDraft
+    });
+
+    const savedQuiz = await quiz.save();
+    
+    console.log('✅ Quiz saved to database:', {
+      _id: savedQuiz._id,
+      timerMode: savedQuiz.timerMode,
+      totalTime: savedQuiz.totalTime,
+      status: savedQuiz.status,
+      isPublished: savedQuiz.isPublished
+    });
 
     return res.status(201).json({
       success: true,
       message: 'Quiz berhasil dibuat!',
-      data: quiz
+      data: savedQuiz
     });
   } catch (error) {
     console.error('Error creating quiz:', error);
@@ -205,9 +229,23 @@ exports.publishQuiz = async (req, res, next) => {
       });
     }
 
+    console.log('📢 Publishing quiz - BEFORE save:', {
+      _id: quiz._id,
+      timerMode: quiz.timerMode,
+      totalTime: quiz.totalTime,
+      status: quiz.status
+    });
+
     quiz.status = 'published';
     quiz.isPublished = true;
     quiz = await quiz.save();
+
+    console.log('📢 Publishing quiz - AFTER save:', {
+      _id: quiz._id,
+      timerMode: quiz.timerMode,
+      totalTime: quiz.totalTime,
+      status: quiz.status
+    });
 
     return res.status(200).json({
       success: true,

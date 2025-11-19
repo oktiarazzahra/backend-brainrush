@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const { protect } = require('../middleware/authMiddleware');
 const Quiz = require('../models/Quiz');
+const quizController = require('../controllers/quizController');
 
 // Setup multer untuk upload gambar
 const storage = multer.diskStorage({
@@ -75,24 +76,7 @@ router.get('/my-quizzes', protect, async (req, res) => {
 // @route POST /api/quizzes
 // @desc Create a new quiz
 // @access Private
-router.post('/', protect, async (req, res) => {
-  try {
-    const { title, description, questions } = req.body;
-    const quiz = await Quiz.create({
-      title,
-      description,
-      questions,
-      createdBy: req.user._id,
-      isDraft: true,
-      isPublished: false,
-      status: 'draft',
-    });
-    res.status(201).json(quiz);
-  } catch (error) {
-    console.error('❌ Create quiz error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
+router.post('/', protect, quizController.createQuiz);
 
 // @route PUT /api/quizzes/:id/publish
 // @desc Publish quiz
