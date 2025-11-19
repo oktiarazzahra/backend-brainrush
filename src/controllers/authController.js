@@ -3,6 +3,30 @@ const { generateToken } = require('../config/jwt');
 const { sendMail } = require('../utils/mailer');
 const generateOTP = require('../utils/generateOTP');
 
+// @route   GET /api/auth/users
+// @desc    Get all users (Admin only)
+// @access  Private/Admin
+exports.getAllUsers = async (req, res, next) => {
+  try {
+    console.log('🔍 Fetching all users...');
+    console.log('👤 Requested by:', req.user.email, '| Role:', req.user.role);
+    
+    const users = await User.find().select('-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire').sort({ createdAt: -1 });
+    
+    console.log(`✅ Found ${users.length} users`);
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        users
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching users:', error);
+    next(error);
+  }
+};
+
 // @route   POST /api/auth/register
 // @desc    Register a user and send OTP
 // @access  Public
@@ -271,6 +295,7 @@ exports.login = async (req, res, next) => {
           name: user.name,
           email: user.email,
           avatar: user.avatar,
+          role: user.role,
           totalGamesPlayed: user.totalGamesPlayed,
           totalScore: user.totalScore,
           isVerified: user.isVerified

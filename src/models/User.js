@@ -18,6 +18,11 @@ const userSchema = new mongoose.Schema({
     minlength: 6,
     select: false
   },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
   avatar: {
     type: String,
     default: ''

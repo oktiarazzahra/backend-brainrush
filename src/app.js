@@ -5,6 +5,7 @@ const authRoutes = require('./routes/authRoutes');
 const quizRoutes = require('./routes/quizRoutes');
 const learningRoutes = require('./routes/learningRoutes');
 const gameRoutes = require('./routes/gameRoutes');
+const supportRoutes = require('./routes/supportRoutes');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health check
 app.get('/', (req, res) => {

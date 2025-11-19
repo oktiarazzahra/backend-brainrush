@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
+const { protect, isAdmin } = require('../middleware/authMiddleware');
 const {
   register,
   verifyOTP,
@@ -10,7 +10,8 @@ const {
   verifyResetOTP,
   resetPassword,
   getMe,
-  updateProfile
+  updateProfile,
+  getAllUsers
 } = require('../controllers/authController');
 
 // @route   POST /api/auth/register
@@ -57,5 +58,10 @@ router.get('/me', protect, getMe);
 // @desc    Update user profile
 // @access  Private
 router.put('/profile', protect, updateProfile);
+
+// @route   GET /api/auth/users
+// @desc    Get all users (Admin only)
+// @access  Private/Admin
+router.get('/users', protect, isAdmin, getAllUsers);
 
 module.exports = router;
