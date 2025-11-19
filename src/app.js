@@ -24,7 +24,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/learning', learningRoutes);
-app.use('/api/game', gameRoutes);
+app.use('/api/games', gameRoutes);
 app.use('/api/support', supportRoutes);
 
 // Health check
