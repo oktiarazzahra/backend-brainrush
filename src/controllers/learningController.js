@@ -61,9 +61,9 @@ exports.startLearning = async (req, res, next) => {
 // @access  Private
 exports.submitLearning = async (req, res, next) => {
   try {
-    const { quizId, answers } = req.body;
+    const { quizId, answers, progressId } = req.body;
 
-    console.log('📥 Received submission:', { quizId, answersCount: answers?.length, userId: req.userId });
+    console.log('📥 Received submission:', { quizId, answersCount: answers?.length, userId: req.userId, progressId });
 
     if (!quizId || !answers) {
       return res.status(400).json({
@@ -175,18 +175,40 @@ exports.submitLearning = async (req, res, next) => {
     console.log('📊 Final score:', totalScore, '/', totalPoints);
     console.log('📊 Correct answers:', correctAnswers, '/', quiz.questions.length);
 
-    // Save to PlayerScore
+    // Save or update PlayerScore
     console.log('💾 Saving to database...');
-    const playerScore = await PlayerScore.create({
-      userId: req.userId,
-      quizId,
-      mode: 'learning',
-      score: totalScore,
-      totalPoints,
-      answers: answersDetails
-    });
-
-    console.log('✅ Saved successfully with ID:', playerScore._id);
+    let playerScore;
+    
+    if (progressId) {
+      // Update existing progress
+      playerScore = await PlayerScore.findByIdAndUpdate(
+        progressId,
+        {
+          score: totalScore,
+          totalPoints,
+          answers: answersDetails,
+          isCompleted: true,
+          currentQuestionIndex: quiz.questions.length,
+          completedAt: new Date()
+        },
+        { new: true }
+      );
+      console.log('✅ Updated existing progress with ID:', playerScore._id);
+    } else {
+      // Create new record
+      playerScore = await PlayerScore.create({
+        userId: req.userId,
+        quizId,
+        mode: 'learning',
+        score: totalScore,
+        totalPoints,
+        answers: answersDetails,
+        isCompleted: true,
+        totalQuestions: quiz.questions.length,
+        currentQuestionIndex: quiz.questions.length
+      });
+      console.log('✅ Saved successfully with ID:', playerScore._id);
+    }
 
     res.status(201).json({
       status: 'success',
@@ -217,17 +239,145 @@ exports.submitLearning = async (req, res, next) => {
   }
 };
 
+// @route   POST /api/learning/save-progress
+// @desc    Save progress when user hasn't finished quiz
+// @access  Private
+exports.saveProgress = async (req, res, next) => {
+  try {
+    const { quizId, currentQuestionIndex, answers, totalQuestions, timeLeft, timerMode, totalTimeSpent } = req.body;
+
+    console.log('💾 Saving progress:', { quizId, currentQuestionIndex, totalQuestions, timeLeft, timerMode, userId: req.userId });
+
+    if (!quizId || currentQuestionIndex === undefined || !totalQuestions) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide quizId, currentQuestionIndex, and totalQuestions'
+      });
+    }
+
+    // Check if progress already exists
+    let progress = await PlayerScore.findOne({
+      userId: req.userId,
+      quizId,
+      mode: 'learning',
+      isCompleted: false
+    });
+
+    if (progress) {
+      // Update existing progress
+      progress.currentQuestionIndex = currentQuestionIndex;
+      progress.answers = answers || [];
+      progress.totalQuestions = totalQuestions;
+      progress.timeLeft = timeLeft !== undefined ? timeLeft : progress.timeLeft;
+      progress.timerMode = timerMode || progress.timerMode;
+      progress.totalTimeSpent = totalTimeSpent !== undefined ? totalTimeSpent : progress.totalTimeSpent;
+      await progress.save();
+      console.log('✅ Updated existing progress');
+    } else {
+      // Create new progress
+      progress = await PlayerScore.create({
+        userId: req.userId,
+        quizId,
+        mode: 'learning',
+        currentQuestionIndex,
+        totalQuestions,
+        answers: answers || [],
+        isCompleted: false,
+        score: 0,
+        totalPoints: totalQuestions,
+        timeLeft: timeLeft || null,
+        timerMode: timerMode || 'per-question',
+        totalTimeSpent: totalTimeSpent || 0
+      });
+      console.log('✅ Created new progress');
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Progress saved',
+      data: {
+        progressId: progress._id,
+        currentQuestionIndex: progress.currentQuestionIndex
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error saving progress:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// @route   GET /api/learning/progress/:quizId
+// @desc    Get saved progress for a quiz
+// @access  Private
+exports.getProgress = async (req, res, next) => {
+  try {
+    const { quizId } = req.params;
+
+    console.log('📥 Loading progress for quiz:', quizId);
+
+    const progress = await PlayerScore.findOne({
+      userId: req.userId,
+      quizId,
+      mode: 'learning',
+      isCompleted: false
+    });
+
+    if (!progress) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No progress found'
+      });
+    }
+
+    console.log('✅ Progress found:', progress.currentQuestionIndex, '/', progress.totalQuestions);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        progress: {
+          id: progress._id,
+          currentQuestionIndex: progress.currentQuestionIndex,
+          totalQuestions: progress.totalQuestions,
+          answers: progress.answers,
+          timeLeft: progress.timeLeft,
+          timerMode: progress.timerMode,
+          totalTimeSpent: progress.totalTimeSpent || 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error loading progress:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
 // @route   GET /api/learning/history
-// @desc    Get user's learning history
+// @desc    Get user's learning history (completed only)
 // @access  Private
 exports.getLearningHistory = async (req, res, next) => {
   try {
     const playerScores = await PlayerScore.find({
       userId: req.userId,
-      mode: 'learning'
+      mode: 'learning',
+      isCompleted: true
     })
       .populate('quizId', 'title category')
       .sort({ completedAt: -1 });
+
+    // Also get in-progress quizzes
+    const inProgressQuizzes = await PlayerScore.find({
+      userId: req.userId,
+      mode: 'learning',
+      isCompleted: false
+    })
+      .populate('quizId', 'title category')
+      .sort({ updatedAt: -1 });
 
     res.status(200).json({
       status: 'success',
@@ -240,7 +390,18 @@ exports.getLearningHistory = async (req, res, next) => {
           score: ps.score,
           totalPoints: ps.totalPoints,
           percentage: Math.round((ps.score / ps.totalPoints) * 100),
-          completedAt: ps.completedAt
+          completedAt: ps.completedAt,
+          isCompleted: true
+        })),
+        inProgress: inProgressQuizzes.map(ps => ({
+          id: ps._id,
+          quizId: ps.quizId._id,
+          quizTitle: ps.quizId.title,
+          category: ps.quizId.category,
+          currentQuestionIndex: ps.currentQuestionIndex,
+          totalQuestions: ps.totalQuestions,
+          isCompleted: false,
+          lastUpdated: ps.updatedAt
         }))
       }
     });

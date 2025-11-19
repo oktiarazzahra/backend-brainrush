@@ -5,7 +5,9 @@ const {
   submitLearning,
   getLearningHistory,
   getLearningResult,
-  getLearningStats
+  getLearningStats,
+  saveProgress,
+  getProgress
 } = require('../controllers/learningController');
 
 const router = express.Router();
@@ -15,6 +17,8 @@ router.use(protect);
 
 router.post('/start/:quizId', startLearning);
 router.post('/submit', submitLearning);
+router.post('/save-progress', saveProgress);
+router.get('/progress/:quizId', getProgress);
 router.get('/history', getLearningHistory);
 router.get('/stats', getLearningStats);
 router.get('/:scoreId', getLearningResult);

@@ -33,6 +33,33 @@ const playerScoreSchema = new mongoose.Schema({
   completedAt: {
     type: Date,
     default: Date.now
+  },
+  // Fields for in-progress quiz
+  isCompleted: {
+    type: Boolean,
+    default: false
+  },
+  currentQuestionIndex: {
+    type: Number,
+    default: 0
+  },
+  totalQuestions: {
+    type: Number,
+    default: 0
+  },
+  // Timer state
+  timeLeft: {
+    type: Number,
+    default: null // Time left in seconds
+  },
+  timerMode: {
+    type: String,
+    enum: ['none', 'per-question', 'total-time'],
+    default: 'per-question'
+  },
+  totalTimeSpent: {
+    type: Number,
+    default: 0 // Total time spent on quiz in seconds
   }
 }, { timestamps: true });
 
