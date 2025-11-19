@@ -135,12 +135,14 @@ exports.updateQuiz = async (req, res, next) => {
       });
     }
 
-    const { title, description, category, questions, coverImage } = req.body;
+    const { title, description, category, questions, coverImage, timerMode, totalTime } = req.body;
 
     if (title) quiz.title = title;
     if (description) quiz.description = description;
     if (category) quiz.category = category;
     if (coverImage !== undefined) quiz.coverImage = coverImage; // Support base64 or null to remove
+    if (timerMode) quiz.timerMode = timerMode;
+    if (totalTime !== undefined) quiz.totalTime = totalTime; // Allow null for non-total-time modes
 
     if (questions && Array.isArray(questions)) {
       const formatQuestions = questions.map((q) => {

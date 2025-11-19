@@ -292,7 +292,7 @@ exports.submitAnswer = async (req, res, next) => {
   }
 };
 
-// @route   PUT /api/games/:id/next-question
+// @route   POST /api/games/:id/next-question
 // @desc    Move to next question (host only)
 // @access  Private
 exports.nextQuestion = async (req, res, next) => {

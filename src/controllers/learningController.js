@@ -362,6 +362,8 @@ exports.getProgress = async (req, res, next) => {
 // @access  Private
 exports.getLearningHistory = async (req, res, next) => {
   try {
+    console.log('📥 Getting learning history for user:', req.userId);
+    
     const playerScores = await PlayerScore.find({
       userId: req.userId,
       mode: 'learning',
@@ -369,6 +371,8 @@ exports.getLearningHistory = async (req, res, next) => {
     })
       .populate('quizId', 'title category')
       .sort({ completedAt: -1 });
+
+    console.log('✅ Found', playerScores.length, 'completed quizzes');
 
     // Also get in-progress quizzes
     const inProgressQuizzes = await PlayerScore.find({
@@ -379,25 +383,33 @@ exports.getLearningHistory = async (req, res, next) => {
       .populate('quizId', 'title category')
       .sort({ updatedAt: -1 });
 
+    console.log('✅ Found', inProgressQuizzes.length, 'in-progress quizzes');
+
+    // Filter out records where quizId is null (quiz was deleted)
+    const validPlayerScores = playerScores.filter(ps => ps.quizId != null);
+    const validInProgress = inProgressQuizzes.filter(ps => ps.quizId != null);
+
+    console.log('✅ Valid completed:', validPlayerScores.length, 'Valid in-progress:', validInProgress.length);
+
     res.status(200).json({
       status: 'success',
-      count: playerScores.length,
+      count: validPlayerScores.length,
       data: {
-        history: playerScores.map(ps => ({
+        history: validPlayerScores.map(ps => ({
           id: ps._id,
           quizTitle: ps.quizId.title,
-          category: ps.quizId.category,
+          category: ps.quizId.category || 'Umum',
           score: ps.score,
           totalPoints: ps.totalPoints,
           percentage: Math.round((ps.score / ps.totalPoints) * 100),
           completedAt: ps.completedAt,
           isCompleted: true
         })),
-        inProgress: inProgressQuizzes.map(ps => ({
+        inProgress: validInProgress.map(ps => ({
           id: ps._id,
           quizId: ps.quizId._id,
           quizTitle: ps.quizId.title,
-          category: ps.quizId.category,
+          category: ps.quizId.category || 'Umum',
           currentQuestionIndex: ps.currentQuestionIndex,
           totalQuestions: ps.totalQuestions,
           isCompleted: false,
@@ -406,6 +418,8 @@ exports.getLearningHistory = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('❌ Error in getLearningHistory:', error);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: error.message

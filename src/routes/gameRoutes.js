@@ -21,7 +21,7 @@ router.post('/join', joinGame);
 router.get('/:id', getGame);
 router.post('/:id/start', startGame);
 router.post('/:id/answer', submitAnswer);
-router.put('/:id/next-question', nextQuestion);
+router.post('/:id/next-question', nextQuestion);
 router.post('/:id/end', endGame);
 router.get('/:id/results', getGameResults);
 
