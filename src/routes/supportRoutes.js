@@ -6,7 +6,8 @@ const {
   getAllTickets,
   getTicketById,
   updateTicket,
-  getMyTickets
+  getMyTickets,
+  replyTicket
 } = require('../controllers/supportController');
 
 // @route   POST /api/support/tickets
@@ -33,5 +34,10 @@ router.get('/tickets/:id', protect, getTicketById);
 // @desc    Update ticket (Admin only)
 // @access  Private/Admin
 router.put('/tickets/:id', protect, updateTicket);
+
+// @route   POST /api/support/tickets/:id/reply
+// @desc    Reply to ticket via Nodemailer (Admin only)
+// @access  Private/Admin
+router.post('/tickets/:id/reply', protect, replyTicket);
 
 module.exports = router;

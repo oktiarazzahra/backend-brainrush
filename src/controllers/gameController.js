@@ -88,8 +88,24 @@ exports.joinGame = async (req, res, next) => {
       });
     }
 
-    // Check if game is still accepting players
-    if (liveGame.gameStatus !== 'waiting' && liveGame.gameStatus !== 'running') {
+    // Check if game already started - code expired
+    if (liveGame.gameStatus === 'running') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Kode sudah kadaluarsa. Game telah dimulai.'
+      });
+    }
+
+    // Check if game is ended
+    if (liveGame.gameStatus === 'ended') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Game sudah berakhir'
+      });
+    }
+
+    // Only allow joining if game is waiting
+    if (liveGame.gameStatus !== 'waiting') {
       return res.status(400).json({
         status: 'error',
         message: 'Cannot join this game'
@@ -326,8 +342,13 @@ exports.nextQuestion = async (req, res, next) => {
       const rankedPlayers = [...liveGame.players]
         .sort((a, b) => b.score - a.score)
         .map((player, index) => ({
-          ...player,
-          rank: index + 1
+          userId: player.userId,
+          playerName: player.playerName,
+          avatar: player.avatar,
+          score: player.score,
+          totalPoints: player.score,
+          rank: index + 1,
+          answers: player.answers || []
         }));
 
       // Save to GameHistory
@@ -402,8 +423,13 @@ exports.endGame = async (req, res, next) => {
     const rankedPlayers = [...liveGame.players]
       .sort((a, b) => b.score - a.score)
       .map((player, index) => ({
-        ...player,
-        rank: index + 1
+        userId: player.userId,
+        playerName: player.playerName,
+        avatar: player.avatar,
+        score: player.score,
+        totalPoints: player.score,
+        rank: index + 1,
+        answers: player.answers || []
       }));
 
     // Save to GameHistory
@@ -454,6 +480,95 @@ exports.getGameResults = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       data: { results: gameHistory }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// @route   GET /api/games/history/user
+// @desc    Get user's game history (as player or host)
+// @access  Private
+exports.getUserGameHistory = async (req, res, next) => {
+  try {
+    // Find games where user was a player
+    const playerGames = await GameHistory.find({
+      'playerResults.userId': req.userId
+    })
+      .populate('quizId', 'title category coverImage')
+      .populate('hostId', 'name')
+      .sort({ completedAt: -1 });
+
+    // Find games where user was host
+    const hostGames = await GameHistory.find({
+      hostId: req.userId
+    })
+      .populate('quizId', 'title category coverImage')
+      .sort({ completedAt: -1 });
+
+    // Process player games to include user's rank and score
+    const playerHistory = playerGames.map(game => {
+      const userResult = game.playerResults.find(
+        p => p.userId?.toString() === req.userId
+      );
+
+      return {
+        id: game._id,
+        quizTitle: game.quizId?.title || 'Unknown Quiz',
+        category: game.quizId?.category || 'General',
+        coverImage: game.quizId?.coverImage,
+        date: game.completedAt,
+        players: game.totalPlayers,
+        yourRank: userResult?.rank || 0,
+        yourScore: userResult?.score || 0,
+        topScore: game.playerResults[0]?.score || 0,
+        avgScore: Math.round(
+          game.playerResults.reduce((sum, p) => sum + (p.score || 0), 0) / game.playerResults.length
+        ),
+        duration: game.endedAt && game.startedAt 
+          ? Math.round((new Date(game.endedAt) - new Date(game.startedAt)) / 60000) + ' menit'
+          : 'N/A',
+        PIN: game.PIN,
+        role: 'player'
+      };
+    });
+
+    // Process host games
+    const hostHistory = hostGames.map(game => {
+      return {
+        id: game._id,
+        quizTitle: game.quizId?.title || 'Unknown Quiz',
+        category: game.quizId?.category || 'General',
+        coverImage: game.quizId?.coverImage,
+        date: game.completedAt,
+        players: game.totalPlayers,
+        topScore: game.playerResults[0]?.score || 0,
+        avgScore: Math.round(
+          game.playerResults.reduce((sum, p) => sum + (p.score || 0), 0) / game.playerResults.length
+        ),
+        duration: game.endedAt && game.startedAt 
+          ? Math.round((new Date(game.endedAt) - new Date(game.startedAt)) / 60000) + ' menit'
+          : 'N/A',
+        PIN: game.PIN,
+        role: 'host'
+      };
+    });
+
+    // Combine and sort by date
+    const allHistory = [...playerHistory, ...hostHistory]
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        history: allHistory,
+        totalGames: allHistory.length,
+        playerGames: playerHistory.length,
+        hostGames: hostHistory.length
+      }
     });
   } catch (error) {
     res.status(500).json({

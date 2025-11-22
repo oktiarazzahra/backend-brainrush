@@ -47,7 +47,8 @@ const liveGameSchema = new mongoose.Schema({
   }],
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    expires: 86400 // TTL: Auto-delete after 24 hours (in seconds)
   }
 }, { timestamps: true });
 

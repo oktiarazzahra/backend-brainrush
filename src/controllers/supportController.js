@@ -1,5 +1,5 @@
 const SupportTicket = require('../models/SupportTicket');
-const { sendEmail } = require('../utils/mailer');
+const { sendMail } = require('../utils/mailer');
 
 // @desc    Create new support ticket
 // @route   POST /api/support/tickets
@@ -49,7 +49,7 @@ exports.createTicket = async (req, res) => {
         other: 'Lainnya'
       };
 
-      await sendEmail({
+      await sendMail({
         to: 'support@brainrush.com',
         subject: `[NEW TICKET #${ticket._id}] ${categoryNames[category]}: ${subject}`,
         html: `
@@ -79,7 +79,7 @@ exports.createTicket = async (req, res) => {
 
     // Kirim email konfirmasi ke user
     try {
-      await sendEmail({
+      await sendMail({
         to: email,
         subject: `Laporan Anda telah diterima - Ticket #${ticket._id}`,
         html: `
@@ -262,6 +262,102 @@ exports.getMyTickets = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Terjadi kesalahan saat mengambil data ticket'
+    });
+  }
+};
+
+// @desc    Reply to ticket via Nodemailer (Admin only)
+// @route   POST /api/support/tickets/:id/reply
+// @access  Private/Admin
+exports.replyTicket = async (req, res) => {
+  try {
+    console.log('📧 Admin replying to ticket:', req.params.id);
+    const { subject, message } = req.body;
+
+    if (!subject || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject dan message tidak boleh kosong'
+      });
+    }
+
+    const ticket = await SupportTicket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket tidak ditemukan'
+      });
+    }
+
+    // Kirim email balasan via Nodemailer
+    try {
+      await sendMail({
+        to: ticket.email,
+        subject: subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">🎓 Brain Rush</h1>
+              <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">Quiz Game Platform</p>
+            </div>
+            
+            <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+              <h2 style="color: #1f2937; margin-top: 0;">Balasan untuk Ticket #${ticket._id.toString().slice(-6)}</h2>
+              
+              <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #6b7280; font-size: 13px; font-weight: 600;">TICKET ORIGINAL:</p>
+                <p style="margin: 5px 0 0 0; color: #1f2937; font-weight: 600;">${ticket.subject}</p>
+              </div>
+              
+              <div style="margin: 25px 0;">
+                <p style="color: #6b7280; font-size: 13px; font-weight: 600; margin-bottom: 10px;">BALASAN DARI ADMIN:</p>
+                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6;">
+                  ${message}
+                </div>
+              </div>
+              
+              <div style="background: #eff6ff; border: 1px solid #dbeafe; padding: 15px; border-radius: 8px; margin-top: 25px;">
+                <p style="margin: 0; color: #1e40af; font-size: 14px;">
+                  💡 <strong>Perlu bantuan lebih lanjut?</strong><br>
+                  Balas email ini atau buat laporan baru di aplikasi Brain Rush.
+                </p>
+              </div>
+            </div>
+            
+            <div style="background: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; border-top: none;">
+              <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                Email ini dikirim otomatis dari <strong>Brain Rush Support Team</strong><br>
+                © ${new Date().getFullYear()} Brain Rush. All rights reserved.
+              </p>
+            </div>
+          </div>
+        `
+      });
+
+      console.log('✅ Reply email sent successfully to:', ticket.email);
+
+      // Update ticket status jika diperlukan
+      if (ticket.status === 'open') {
+        ticket.status = 'in-progress';
+        await ticket.save();
+      }
+
+      res.json({
+        success: true,
+        message: 'Balasan berhasil dikirim via email'
+      });
+
+    } catch (emailError) {
+      console.error('❌ Error sending reply email:', emailError);
+      throw new Error('Gagal mengirim email: ' + emailError.message);
+    }
+
+  } catch (error) {
+    console.error('Reply ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengirim balasan'
     });
   }
 };

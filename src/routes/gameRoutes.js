@@ -8,7 +8,8 @@ const {
   submitAnswer,
   nextQuestion,
   endGame,
-  getGameResults
+  getGameResults,
+  getUserGameHistory
 } = require('../controllers/gameController');
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.use(protect);
 
 router.post('/', createLiveGame);
 router.post('/join', joinGame);
+router.get('/history/user', getUserGameHistory);
 router.get('/:id', getGame);
 router.post('/:id/start', startGame);
 router.post('/:id/answer', submitAnswer);
