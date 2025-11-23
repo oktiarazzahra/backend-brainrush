@@ -20,13 +20,27 @@ const liveGameSchema = new mongoose.Schema({
   players: [{
     userId: mongoose.Schema.Types.ObjectId,
     playerName: String,
-    avatar: String,
+    avatar: {
+      type: mongoose.Schema.Types.Mixed,
+      default: '👤'
+    },
     score: { type: Number, default: 0 },
-    joinedAt: { type: Date, default: Date.now }
+    joinedAt: { type: Date, default: Date.now },
+    answers: [{
+      questionId: mongoose.Schema.Types.ObjectId,
+      answer: mongoose.Schema.Types.Mixed,
+      isCorrect: Boolean,
+      answeredAt: { type: Date, default: Date.now },
+      timeSpent: { type: Number, default: null }
+    }]
   }],
   currentQuestion: {
     type: Number,
     default: 0
+  },
+  questionStartedAt: {
+    type: Date,
+    default: null
   },
   gameStatus: {
     type: String,

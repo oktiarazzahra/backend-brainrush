@@ -65,13 +65,14 @@ io.on('connection', (socket) => {
   });
 
   // Player submitted answer
-  socket.on('submit-answer', ({ gameId, playerName, questionId, isCorrect, score }) => {
+  socket.on('submit-answer', ({ gameId, playerName, questionId, isCorrect, score, timeSpent }) => {
     console.log(`✅ ${playerName} submitted answer for question ${questionId}`);
     io.to(gameId).emit('answer-submitted', {
       playerName,
       questionId,
       isCorrect,
-      score
+      score,
+      timeSpent
     });
   });
 

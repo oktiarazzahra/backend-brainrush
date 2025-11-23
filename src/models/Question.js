@@ -12,7 +12,7 @@ const questionSchema = new mongoose.Schema({
   },
   questionType: {
     type: String,
-    enum: ['Pilihan Ganda', 'Benar Salah', 'Isian', 'multiple-choice', 'true-false', 'short-answer'],
+    enum: ['Pilihan Ganda', 'Benar Salah', 'Isian', 'multiple-choice', 'multiple-answer', 'true-false', 'short-answer'],
     default: 'Pilihan Ganda',
   },
   options: [

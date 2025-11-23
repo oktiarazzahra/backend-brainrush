@@ -129,12 +129,26 @@ exports.joinGame = async (req, res, next) => {
       });
     }
 
+    const normalizedNameRaw = typeof playerName === 'string' ? playerName.trim() : '';
+    const normalizedName = normalizedNameRaw || 'Player';
+    const normalizedAvatar = (() => {
+      if (avatar && typeof avatar === 'object') {
+        return {
+          emoji: avatar.emoji || '👤',
+          color: avatar.color || null,
+          name: avatar.name || null
+        };
+      }
+      return avatar || '👤';
+    })();
+
     liveGame.players.push({
       userId: req.userId,
-      playerName,
-      avatar,
+      playerName: normalizedName,
+      avatar: normalizedAvatar,
       score: 0,
-      joinedAt: new Date()
+      joinedAt: new Date(),
+      answers: []
     });
 
     await liveGame.save();
@@ -165,7 +179,12 @@ exports.joinGame = async (req, res, next) => {
 exports.getGame = async (req, res, next) => {
   try {
     const liveGame = await LiveGame.findById(req.params.id)
-      .populate('quiz')
+      .populate({
+        path: 'quiz',
+        populate: {
+          path: 'questions'
+        }
+      })
       .populate('players.userId', 'name avatar');
 
     if (!liveGame) {
@@ -218,6 +237,7 @@ exports.startGame = async (req, res, next) => {
 
     liveGame.gameStatus = 'running';
     liveGame.startedAt = new Date();
+    liveGame.questionStartedAt = new Date();
     await liveGame.save();
 
     res.status(200).json({
@@ -238,12 +258,19 @@ exports.startGame = async (req, res, next) => {
 // @access  Private
 exports.submitAnswer = async (req, res, next) => {
   try {
-    const { questionId, answer } = req.body;
+    const { questionId, answer, playerName, timeSpent } = req.body;
 
-    if (!questionId || !answer) {
+    if (!questionId) {
       return res.status(400).json({
         status: 'error',
-        message: 'Please provide question ID and answer'
+        message: 'Please provide question ID'
+      });
+    }
+
+    if (answer === undefined || answer === null) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide answer'
       });
     }
 
@@ -257,10 +284,18 @@ exports.submitAnswer = async (req, res, next) => {
       });
     }
 
-    // Find player
-    const playerIndex = liveGame.players.findIndex(p => 
+    const requestedName = typeof playerName === 'string' ? playerName.trim() : null;
+
+    // Find player by user id first, fallback to player name
+    let playerIndex = liveGame.players.findIndex(p => 
       p.userId?.toString() === req.userId
     );
+
+    if (playerIndex === -1 && requestedName) {
+      playerIndex = liveGame.players.findIndex(p => 
+        typeof p.playerName === 'string' && p.playerName.toLowerCase() === requestedName.toLowerCase()
+      );
+    }
 
     if (playerIndex === -1) {
       return res.status(400).json({
@@ -282,12 +317,83 @@ exports.submitAnswer = async (req, res, next) => {
     }
 
     // Check if answer is correct
-    const isCorrect = question.correctAnswer === answer;
+    const normalize = (value) => {
+      if (value === undefined || value === null) return '';
+      if (typeof value === 'string') return value.trim().toLowerCase();
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value).trim().toLowerCase();
+      }
+      return value;
+    };
+
+    const isArrayAnswer = Array.isArray(answer);
+    const normalizedAnswerArray = isArrayAnswer
+      ? answer.map(val => normalize(val)).sort()
+      : null;
+    const normalizedAnswerValue = !isArrayAnswer ? normalize(answer) : null;
+
+    let isCorrect = false;
+    const correctAnswer = question.correctAnswer;
+    let normalizedCorrectArray = null;
+
+    if (Array.isArray(correctAnswer)) {
+      // Check if correctAnswer is array of indices (numbers) - convert to option text
+      const correctIsIndices = correctAnswer.every(val => typeof val === 'number');
+      
+      if (correctIsIndices && question.options) {
+        // Convert indices to option text
+        const correctTexts = correctAnswer.map(idx => question.options[idx]).filter(Boolean);
+        normalizedCorrectArray = correctTexts.map(val => normalize(val)).sort();
+      } else {
+        normalizedCorrectArray = correctAnswer.map(val => normalize(val)).sort();
+      }
+
+      if (normalizedAnswerArray) {
+        isCorrect = normalizedAnswerArray.length === normalizedCorrectArray.length &&
+          normalizedAnswerArray.every((val, idx) => val === normalizedCorrectArray[idx]);
+      } else if (normalizedAnswerValue !== null) {
+        isCorrect = normalizedCorrectArray.includes(normalizedAnswerValue);
+      }
+    } else {
+      // Check if correctAnswer is a single index (number) - convert to option text
+      if (typeof correctAnswer === 'number' && question.options && question.options[correctAnswer]) {
+        isCorrect = normalize(question.options[correctAnswer]) === normalizedAnswerValue;
+      } else {
+        isCorrect = normalize(correctAnswer) === normalizedAnswerValue;
+      }
+    }
+
+    // Check accepted answers if available (case insensitive)
+    if (!isCorrect && Array.isArray(question.acceptedAnswers) && question.acceptedAnswers.length > 0) {
+      const normalizedAccepted = question.acceptedAnswers.map(val => normalize(val));
+      if (normalizedAnswerArray) {
+        const acceptedSet = new Set(normalizedAccepted);
+        isCorrect = normalizedAnswerArray.every(val => acceptedSet.has(val)) &&
+          (!normalizedCorrectArray || normalizedAnswerArray.length === normalizedCorrectArray.length);
+      } else if (normalizedAnswerValue !== null) {
+        isCorrect = normalizedAccepted.includes(normalizedAnswerValue);
+      }
+    }
 
     // Update score if correct
     if (isCorrect) {
-      liveGame.players[playerIndex].score += question.points;
+      liveGame.players[playerIndex].score += (question.points || 1);
     }
+
+    // Record answer history for this player
+    if (!Array.isArray(liveGame.players[playerIndex].answers)) {
+      liveGame.players[playerIndex].answers = [];
+    }
+
+    const answerTimeSpent = typeof timeSpent === 'number' && timeSpent >= 0 ? timeSpent : null;
+
+    liveGame.players[playerIndex].answers.push({
+      questionId,
+      answer,
+      isCorrect,
+      answeredAt: new Date(),
+      timeSpent: answerTimeSpent
+    });
 
     await liveGame.save();
 
@@ -297,7 +403,8 @@ exports.submitAnswer = async (req, res, next) => {
       data: {
         isCorrect,
         points: isCorrect ? question.points : 0,
-        currentScore: liveGame.players[playerIndex].score
+        currentScore: liveGame.players[playerIndex].score,
+        timeSpent: answerTimeSpent
       }
     });
   } catch (error) {
@@ -341,15 +448,39 @@ exports.nextQuestion = async (req, res, next) => {
       // Sort players by score (rank)
       const rankedPlayers = [...liveGame.players]
         .sort((a, b) => b.score - a.score)
-        .map((player, index) => ({
-          userId: player.userId,
-          playerName: player.playerName,
-          avatar: player.avatar,
-          score: player.score,
-          totalPoints: player.score,
-          rank: index + 1,
-          answers: player.answers || []
-        }));
+        .map((player, index) => {
+          const avatarDisplay = typeof player.avatar === 'object' && player.avatar?.emoji
+            ? player.avatar.emoji
+            : (player.avatar || '👤');
+
+          const answersHistory = Array.isArray(player.answers)
+            ? player.answers.map(entry => {
+                // Find question details
+                const question = liveGame.quiz.questions.find(q => 
+                  q._id.toString() === entry.questionId.toString()
+                );
+
+                return {
+                  questionId: entry.questionId,
+                  question: question?.question || 'Unknown question',
+                  userAnswer: Array.isArray(entry.answer) ? entry.answer.join(', ') : entry.answer,
+                  correctAnswer: question?.correctAnswer || null,
+                  isCorrect: entry.isCorrect || false,
+                  timeSpent: entry.timeSpent ?? null
+                };
+              })
+            : [];
+
+          return {
+            userId: player.userId,
+            playerName: player.playerName,
+            avatar: avatarDisplay,
+            score: player.score,
+            totalPoints: player.score,
+            rank: index + 1,
+            answers: answersHistory
+          };
+        });
 
       // Save to GameHistory
       const gameHistory = await GameHistory.create({
@@ -369,13 +500,20 @@ exports.nextQuestion = async (req, res, next) => {
         message: 'Game finished',
         data: {
           gameEnded: true,
-          results: rankedPlayers,
+          results: {
+            players: rankedPlayers,
+            quiz: {
+              _id: liveGame.quiz._id,
+              title: liveGame.quiz.title
+            }
+          },
           gameHistoryId: gameHistory._id
         }
       });
     }
 
     liveGame.currentQuestion += 1;
+    liveGame.questionStartedAt = new Date();
     await liveGame.save();
 
     res.status(200).json({
@@ -399,7 +537,8 @@ exports.nextQuestion = async (req, res, next) => {
 // @access  Private
 exports.endGame = async (req, res, next) => {
   try {
-    const liveGame = await LiveGame.findById(req.params.id);
+    const liveGame = await LiveGame.findById(req.params.id)
+      .populate('quiz');
 
     if (!liveGame) {
       return res.status(404).json({
@@ -422,15 +561,39 @@ exports.endGame = async (req, res, next) => {
     // Rank players
     const rankedPlayers = [...liveGame.players]
       .sort((a, b) => b.score - a.score)
-      .map((player, index) => ({
-        userId: player.userId,
-        playerName: player.playerName,
-        avatar: player.avatar,
-        score: player.score,
-        totalPoints: player.score,
-        rank: index + 1,
-        answers: player.answers || []
-      }));
+      .map((player, index) => {
+        const avatarDisplay = typeof player.avatar === 'object' && player.avatar?.emoji
+          ? player.avatar.emoji
+          : (player.avatar || '👤');
+
+        const answersHistory = Array.isArray(player.answers)
+          ? player.answers.map(entry => {
+              // Find question details
+              const question = liveGame.quiz.questions.find(q => 
+                q._id.toString() === entry.questionId.toString()
+              );
+
+              return {
+                questionId: entry.questionId,
+                question: question?.question || 'Unknown question',
+                userAnswer: Array.isArray(entry.answer) ? entry.answer.join(', ') : entry.answer,
+                correctAnswer: question?.correctAnswer || null,
+                isCorrect: entry.isCorrect || false,
+                timeSpent: entry.timeSpent ?? null
+              };
+            })
+          : [];
+
+        return {
+          userId: player.userId,
+          playerName: player.playerName,
+          avatar: avatarDisplay,
+          score: player.score,
+          totalPoints: player.score,
+          rank: index + 1,
+          answers: answersHistory
+        };
+      });
 
     // Save to GameHistory
     const gameHistory = await GameHistory.create({
@@ -449,7 +612,13 @@ exports.endGame = async (req, res, next) => {
       status: 'success',
       message: 'Game ended',
       data: {
-        results: rankedPlayers,
+        results: {
+          players: rankedPlayers,
+          quiz: {
+            _id: liveGame.quiz._id,
+            title: liveGame.quiz.title
+          }
+        },
         gameHistoryId: gameHistory._id
       }
     });
