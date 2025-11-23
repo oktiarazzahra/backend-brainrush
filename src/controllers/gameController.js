@@ -375,16 +375,36 @@ exports.submitAnswer = async (req, res, next) => {
       }
     }
 
-    // Update score if correct
+    // Check if player already answered this question
+    if (!Array.isArray(liveGame.players[playerIndex].answers)) {
+      liveGame.players[playerIndex].answers = [];
+    }
+
+    const alreadyAnswered = liveGame.players[playerIndex].answers.find(ans => 
+      ans.questionId.toString() === questionId
+    );
+
+    if (alreadyAnswered) {
+      // Player already answered this question - don't update score, just return existing result
+      return res.status(200).json({
+        status: 'success',
+        message: 'Answer already submitted',
+        data: {
+          isCorrect: alreadyAnswered.isCorrect,
+          points: alreadyAnswered.isCorrect ? (question.points || 1) : 0,
+          currentScore: liveGame.players[playerIndex].score,
+          timeSpent: alreadyAnswered.timeSpent,
+          alreadyAnswered: true
+        }
+      });
+    }
+
+    // Update score if correct (only on first submission)
     if (isCorrect) {
       liveGame.players[playerIndex].score += (question.points || 1);
     }
 
     // Record answer history for this player
-    if (!Array.isArray(liveGame.players[playerIndex].answers)) {
-      liveGame.players[playerIndex].answers = [];
-    }
-
     const answerTimeSpent = typeof timeSpent === 'number' && timeSpent >= 0 ? timeSpent : null;
 
     liveGame.players[playerIndex].answers.push({

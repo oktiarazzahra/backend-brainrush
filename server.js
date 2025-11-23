@@ -12,12 +12,25 @@ connectDB();
 // Create HTTP server
 const server = http.createServer(app);
 
-// Setup Socket.IO
+// Setup Socket.IO with performance optimizations
 const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
     methods: ['GET', 'POST'],
     credentials: true
+  },
+  // Performance optimizations
+  transports: ['websocket'], // Only websocket, no polling
+  pingTimeout: 60000, // 60 seconds before timeout
+  pingInterval: 25000, // Ping every 25 seconds
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e6, // 1MB max message size
+  allowEIO3: true,
+  // Connection management
+  connectTimeout: 45000,
+  // Performance settings
+  perMessageDeflate: {
+    threshold: 1024 // Only compress messages > 1KB
   }
 });
 
