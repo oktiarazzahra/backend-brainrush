@@ -244,9 +244,9 @@ exports.submitLearning = async (req, res, next) => {
 // @access  Private
 exports.saveProgress = async (req, res, next) => {
   try {
-    const { quizId, currentQuestionIndex, answers, totalQuestions, timeLeft, timerMode, totalTimeSpent } = req.body;
+    const { quizId, currentQuestionIndex, answers, totalQuestions, timeLeft, timerMode, totalTimeSpent, quizEndTime } = req.body;
 
-    console.log('💾 Saving progress:', { quizId, currentQuestionIndex, totalQuestions, timeLeft, timerMode, userId: req.userId });
+    console.log('💾 Saving progress:', { quizId, currentQuestionIndex, totalQuestions, timeLeft, timerMode, quizEndTime, userId: req.userId });
 
     if (!quizId || currentQuestionIndex === undefined || !totalQuestions) {
       return res.status(400).json({
@@ -271,6 +271,7 @@ exports.saveProgress = async (req, res, next) => {
       progress.timeLeft = timeLeft !== undefined ? timeLeft : progress.timeLeft;
       progress.timerMode = timerMode || progress.timerMode;
       progress.totalTimeSpent = totalTimeSpent !== undefined ? totalTimeSpent : progress.totalTimeSpent;
+      progress.quizEndTime = quizEndTime || progress.quizEndTime;
       await progress.save();
       console.log('✅ Updated existing progress');
     } else {
@@ -287,7 +288,9 @@ exports.saveProgress = async (req, res, next) => {
         totalPoints: totalQuestions,
         timeLeft: timeLeft || null,
         timerMode: timerMode || 'per-question',
-        totalTimeSpent: totalTimeSpent || 0
+        totalTimeSpent: totalTimeSpent || 0,
+        startedAt: new Date(), // Save when quiz was first started
+        quizEndTime: quizEndTime ? new Date(quizEndTime) : null // Save absolute end time
       });
       console.log('✅ Created new progress');
     }
@@ -344,7 +347,9 @@ exports.getProgress = async (req, res, next) => {
           answers: progress.answers,
           timeLeft: progress.timeLeft,
           timerMode: progress.timerMode,
-          totalTimeSpent: progress.totalTimeSpent || 0
+          totalTimeSpent: progress.totalTimeSpent || 0,
+          startedAt: progress.startedAt, // Timestamp when quiz was first started
+          quizEndTime: progress.quizEndTime // Absolute end time based on system time
         }
       }
     });
@@ -374,16 +379,18 @@ exports.getLearningHistory = async (req, res, next) => {
 
     console.log('✅ Found', playerScores.length, 'completed quizzes');
 
-    // Also get in-progress quizzes
+    // Also get in-progress quizzes - HANYA yang tanpa timer (none mode)
+    // Quiz dengan timer yang keluar dianggap selesai dan masuk history
     const inProgressQuizzes = await PlayerScore.find({
       userId: req.userId,
       mode: 'learning',
-      isCompleted: false
+      isCompleted: false,
+      timerMode: 'none' // Hanya quiz tanpa timer yang bisa di-continue
     })
       .populate('quizId', 'title category')
       .sort({ updatedAt: -1 });
 
-    console.log('✅ Found', inProgressQuizzes.length, 'in-progress quizzes');
+    console.log('✅ Found', inProgressQuizzes.length, 'in-progress quizzes (timer mode: none only)');
 
     // Filter out records where quizId is null (quiz was deleted)
     const validPlayerScores = playerScores.filter(ps => ps.quizId != null);

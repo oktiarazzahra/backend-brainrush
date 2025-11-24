@@ -60,6 +60,14 @@ const playerScoreSchema = new mongoose.Schema({
   totalTimeSpent: {
     type: Number,
     default: 0 // Total time spent on quiz in seconds
+  },
+  startedAt: {
+    type: Date,
+    default: null // Timestamp when quiz was first started (for calculating elapsed time)
+  },
+  quizEndTime: {
+    type: Date,
+    default: null // Absolute timestamp when quiz should end (based on system time)
   }
 }, { timestamps: true });
 
