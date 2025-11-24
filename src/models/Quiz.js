@@ -101,6 +101,11 @@ const quizSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    quizType: {
+      type: String,
+      enum: ['live', 'schedule'],
+      default: 'schedule',
+    },
     timerMode: {
       type: String,
       enum: ['none', 'per-question', 'total-time'],

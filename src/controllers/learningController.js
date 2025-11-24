@@ -132,13 +132,19 @@ exports.submitLearning = async (req, res, next) => {
         // For true/false questions - handle both string and boolean
         console.log('Comparing bool:', { correct: question.correctAnswer, user: answer.answer, types: [typeof question.correctAnswer, typeof answer.answer] });
         
-        // Convert to boolean for comparison
-        const correctBool = question.correctAnswer === true || question.correctAnswer === 'true';
-        const userBool = answer.answer === true || answer.answer === 'true';
-        
-        console.log('After conversion:', { correctBool, userBool });
-        
-        isCorrect = correctBool === userBool;
+        // PENTING: Jika tidak dijawab (null/undefined), otomatis salah
+        if (answer.answer === null || answer.answer === undefined) {
+          isCorrect = false;
+          console.log('Not answered - marked as wrong');
+        } else {
+          // Convert to boolean for comparison
+          const correctBool = question.correctAnswer === true || question.correctAnswer === 'true';
+          const userBool = answer.answer === true || answer.answer === 'true';
+          
+          console.log('After conversion:', { correctBool, userBool });
+          
+          isCorrect = correctBool === userBool;
+        }
       } else if (questionType === 'short-answer' || questionType === 'Isian') {
         // For short answer questions - case insensitive
         const acceptedAnswers = question.acceptedAnswers || [];
