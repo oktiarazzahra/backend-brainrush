@@ -24,7 +24,9 @@ const gameHistorySchema = new mongoose.Schema({
     rank: Number,
     answers: [{
       questionId: mongoose.Schema.Types.ObjectId,
-      userAnswer: String,
+      question: String,  // Question text
+      userAnswer: mongoose.Schema.Types.Mixed,  // Can be string or array
+      correctAnswer: mongoose.Schema.Types.Mixed,  // Can be string, array, or boolean
       isCorrect: Boolean,
       timeSpent: Number
     }]

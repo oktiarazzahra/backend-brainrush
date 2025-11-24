@@ -380,7 +380,7 @@ exports.getLearningHistory = async (req, res, next) => {
       mode: 'learning',
       isCompleted: true
     })
-      .populate('quizId', 'title category')
+      .populate('quizId', 'title category coverImage')
       .sort({ completedAt: -1 });
 
     console.log('✅ Found', playerScores.length, 'completed quizzes');
@@ -393,7 +393,7 @@ exports.getLearningHistory = async (req, res, next) => {
       isCompleted: false,
       timerMode: 'none' // Hanya quiz tanpa timer yang bisa di-continue
     })
-      .populate('quizId', 'title category')
+      .populate('quizId', 'title category coverImage')
       .sort({ updatedAt: -1 });
 
     console.log('✅ Found', inProgressQuizzes.length, 'in-progress quizzes (timer mode: none only)');
@@ -412,6 +412,7 @@ exports.getLearningHistory = async (req, res, next) => {
           id: ps._id,
           quizTitle: ps.quizId.title,
           category: ps.quizId.category || 'Umum',
+          coverImage: ps.quizId.coverImage || null,
           score: ps.score,
           totalPoints: ps.totalPoints,
           percentage: Math.round((ps.score / ps.totalPoints) * 100),
@@ -423,6 +424,7 @@ exports.getLearningHistory = async (req, res, next) => {
           quizId: ps.quizId._id,
           quizTitle: ps.quizId.title,
           category: ps.quizId.category || 'Umum',
+          coverImage: ps.quizId.coverImage || null,
           currentQuestionIndex: ps.currentQuestionIndex,
           totalQuestions: ps.totalQuestions,
           isCompleted: false,
