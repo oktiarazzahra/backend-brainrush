@@ -2,11 +2,12 @@ const Quiz = require('../models/Quiz');
 
 exports.createQuiz = async (req, res, next) => {
   try {
-    const { title, description, category, questions, timerMode, totalTime } = req.body;
+    const { title, description, category, questions, quizType, timerMode, totalTime } = req.body;
 
     console.log('📥 Received create quiz request:', {
       title,
       category,
+      quizType,
       timerMode,
       totalTime,
       timerModeType: typeof timerMode,
@@ -51,11 +52,13 @@ exports.createQuiz = async (req, res, next) => {
       createdBy: req.userId,
       status: 'draft',
       questions: formatQuestions,
+      quizType: quizType || 'schedule', // Default to 'schedule' if not provided
       timerMode: timerMode && timerMode.trim() !== '' ? timerMode : 'per-question',
       totalTime: totalTime !== null && totalTime !== undefined ? totalTime : null
     });
 
     console.log('📝 Creating quiz with timer settings:', {
+      quizType: quiz.quizType,
       timerMode: quiz.timerMode,
       totalTime: quiz.totalTime,
       status: quiz.status,
@@ -90,7 +93,7 @@ exports.createQuiz = async (req, res, next) => {
 exports.getMyQuizzes = async (req, res, next) => {
   try {
     const quizzes = await Quiz.find({ createdBy: req.userId })
-      .select('title description category status questions createdAt coverImage')
+      .select('title description category status questions createdAt coverImage quizType timerMode totalTime')
       .sort('-createdAt');
 
     return res.status(200).json({
@@ -159,12 +162,13 @@ exports.updateQuiz = async (req, res, next) => {
       });
     }
 
-    const { title, description, category, questions, coverImage, timerMode, totalTime } = req.body;
+    const { title, description, category, questions, coverImage, quizType, timerMode, totalTime } = req.body;
 
     if (title) quiz.title = title;
     if (description) quiz.description = description;
     if (category) quiz.category = category;
     if (coverImage !== undefined) quiz.coverImage = coverImage; // Support base64 or null to remove
+    if (quizType) quiz.quizType = quizType; // Update quiz type (live or schedule)
     if (timerMode) quiz.timerMode = timerMode;
     if (totalTime !== undefined) quiz.totalTime = totalTime; // Allow null for non-total-time modes
 
