@@ -6,6 +6,7 @@ const {
   getGame,
   startGame,
   submitAnswer,
+  saveAnswer,
   nextQuestion,
   endGame,
   getGameResults,
@@ -22,6 +23,7 @@ router.post('/join', joinGame);
 router.get('/history/user', getUserGameHistory);
 router.get('/:id', getGame);
 router.post('/:id/start', startGame);
+router.post('/:id/save-answer', saveAnswer);
 router.post('/:id/answer', submitAnswer);
 router.post('/:id/next-question', nextQuestion);
 router.post('/:id/end', endGame);

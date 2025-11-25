@@ -31,7 +31,8 @@ const liveGameSchema = new mongoose.Schema({
       answer: mongoose.Schema.Types.Mixed,
       isCorrect: Boolean,
       answeredAt: { type: Date, default: Date.now },
-      timeSpent: { type: Number, default: null }
+      timeSpent: { type: Number, default: null },
+      autoSaved: { type: Boolean, default: false }
     }]
   }],
   currentQuestion: {

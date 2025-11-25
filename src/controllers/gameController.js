@@ -253,12 +253,22 @@ exports.startGame = async (req, res, next) => {
   }
 };
 
-// @route   POST /api/games/:id/answer
-// @desc    Submit answer to question
+// @route   POST /api/games/:id/submit-answer
+// @desc    Submit answer for a question
 // @access  Private
 exports.submitAnswer = async (req, res, next) => {
   try {
     const { questionId, answer, playerName, timeSpent } = req.body;
+
+    console.log('📥 submitAnswer received:', {
+      gameId: req.params.id,
+      questionId,
+      answer,
+      playerName,
+      timeSpent,
+      answerType: typeof answer,
+      isArray: Array.isArray(answer)
+    });
 
     if (!questionId) {
       return res.status(400).json({
@@ -267,12 +277,8 @@ exports.submitAnswer = async (req, res, next) => {
       });
     }
 
-    if (answer === undefined || answer === null) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Please provide answer'
-      });
-    }
+    // Allow empty answers (player didn't answer before time ran out)
+    // Removed validation: if (answer === undefined || answer === null)
 
     const liveGame = await LiveGame.findById(req.params.id)
       .populate('quiz');
@@ -336,7 +342,13 @@ exports.submitAnswer = async (req, res, next) => {
     const correctAnswer = question.correctAnswer;
     let normalizedCorrectArray = null;
 
-    if (Array.isArray(correctAnswer)) {
+    // Empty answer is always wrong
+    const hasNoAnswer = (isArrayAnswer && answer.length === 0) || 
+                        (!isArrayAnswer && (answer === '' || answer === null || answer === undefined));
+    
+    if (hasNoAnswer) {
+      isCorrect = false;
+    } else if (Array.isArray(correctAnswer)) {
       // Check if correctAnswer is array of indices (numbers) - convert to option text
       const correctIsIndices = correctAnswer.every(val => typeof val === 'number');
       
@@ -351,7 +363,7 @@ exports.submitAnswer = async (req, res, next) => {
       if (normalizedAnswerArray) {
         isCorrect = normalizedAnswerArray.length === normalizedCorrectArray.length &&
           normalizedAnswerArray.every((val, idx) => val === normalizedCorrectArray[idx]);
-      } else if (normalizedAnswerValue !== null) {
+      } else if (normalizedAnswerValue !== null && normalizedAnswerValue !== '') {
         isCorrect = normalizedCorrectArray.includes(normalizedAnswerValue);
       }
     } else {
@@ -363,8 +375,8 @@ exports.submitAnswer = async (req, res, next) => {
       }
     }
 
-    // Check accepted answers if available (case insensitive)
-    if (!isCorrect && Array.isArray(question.acceptedAnswers) && question.acceptedAnswers.length > 0) {
+    // Check accepted answers if available (case insensitive) - only if not empty
+    if (!hasNoAnswer && !isCorrect && Array.isArray(question.acceptedAnswers) && question.acceptedAnswers.length > 0) {
       const normalizedAccepted = question.acceptedAnswers.map(val => normalize(val));
       if (normalizedAnswerArray) {
         const acceptedSet = new Set(normalizedAccepted);
@@ -380,23 +392,27 @@ exports.submitAnswer = async (req, res, next) => {
       liveGame.players[playerIndex].answers = [];
     }
 
-    const alreadyAnswered = liveGame.players[playerIndex].answers.find(ans => 
+    const existingAnswerIndex = liveGame.players[playerIndex].answers.findIndex(ans => 
       ans.questionId.toString() === questionId
     );
 
-    if (alreadyAnswered) {
-      // Player already answered this question - don't update score, just return existing result
-      return res.status(200).json({
-        status: 'success',
-        message: 'Answer already submitted',
-        data: {
-          isCorrect: alreadyAnswered.isCorrect,
-          points: alreadyAnswered.isCorrect ? (question.points || 1) : 0,
-          currentScore: liveGame.players[playerIndex].score,
-          timeSpent: alreadyAnswered.timeSpent,
-          alreadyAnswered: true
-        }
-      });
+    if (existingAnswerIndex !== -1) {
+      const existingAnswer = liveGame.players[playerIndex].answers[existingAnswerIndex];
+      
+      // If already fully submitted (not just auto-saved), don't update score
+      if (existingAnswer.answeredAt && !existingAnswer.autoSaved) {
+        return res.status(200).json({
+          status: 'success',
+          message: 'Answer already submitted',
+          data: {
+            isCorrect: existingAnswer.isCorrect,
+            points: existingAnswer.isCorrect ? (question.points || 1) : 0,
+            currentScore: liveGame.players[playerIndex].score,
+            timeSpent: existingAnswer.timeSpent,
+            alreadyAnswered: true
+          }
+        });
+      }
     }
 
     // Update score if correct (only on first submission)
@@ -407,15 +423,41 @@ exports.submitAnswer = async (req, res, next) => {
     // Record answer history for this player
     const answerTimeSpent = typeof timeSpent === 'number' && timeSpent >= 0 ? timeSpent : null;
 
-    liveGame.players[playerIndex].answers.push({
-      questionId,
-      answer,
-      isCorrect,
-      answeredAt: new Date(),
-      timeSpent: answerTimeSpent
-    });
+    if (existingAnswerIndex !== -1) {
+      // Update the auto-saved answer with final submission data
+      console.log('✏️ Updating existing answer entry:', {
+        oldAnswer: liveGame.players[playerIndex].answers[existingAnswerIndex].answer,
+        newAnswer: answer,
+        wasAutoSaved: liveGame.players[playerIndex].answers[existingAnswerIndex].autoSaved
+      });
+      
+      liveGame.players[playerIndex].answers[existingAnswerIndex].answer = answer;
+      liveGame.players[playerIndex].answers[existingAnswerIndex].isCorrect = isCorrect;
+      liveGame.players[playerIndex].answers[existingAnswerIndex].answeredAt = new Date();
+      liveGame.players[playerIndex].answers[existingAnswerIndex].timeSpent = answerTimeSpent;
+      liveGame.players[playerIndex].answers[existingAnswerIndex].autoSaved = false;
+    } else {
+      // No auto-save, create new answer entry
+      console.log('➕ Creating new answer entry');
+      
+      liveGame.players[playerIndex].answers.push({
+        questionId,
+        answer,
+        isCorrect,
+        answeredAt: new Date(),
+        timeSpent: answerTimeSpent,
+        autoSaved: false
+      });
+    }
 
     await liveGame.save();
+
+    console.log('✅ Answer saved successfully:', {
+      isCorrect,
+      points: isCorrect ? question.points : 0,
+      newScore: liveGame.players[playerIndex].score,
+      answeredAt: new Date()
+    });
 
     res.status(200).json({
       status: 'success',
@@ -428,6 +470,114 @@ exports.submitAnswer = async (req, res, next) => {
       }
     });
   } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// @route   POST /api/games/:id/save-answer
+// @desc    Save answer (auto-save without validation/scoring)
+// @access  Private
+exports.saveAnswer = async (req, res, next) => {
+  try {
+    const { questionId, answer, playerName } = req.body;
+
+    console.log('💾 saveAnswer (auto-save) received:', {
+      gameId: req.params.id,
+      questionId,
+      answer,
+      answerType: typeof answer,
+      isArray: Array.isArray(answer),
+      playerName
+    });
+
+    if (!questionId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide question ID'
+      });
+    }
+
+    const liveGame = await LiveGame.findById(req.params.id);
+
+    if (!liveGame) {
+      console.log('❌ Game not found:', req.params.id);
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game not found'
+      });
+    }
+
+    const requestedName = typeof playerName === 'string' ? playerName.trim() : null;
+
+    // Find player
+    let playerIndex = liveGame.players.findIndex(p => 
+      p.userId?.toString() === req.userId
+    );
+
+    if (playerIndex === -1 && requestedName) {
+      playerIndex = liveGame.players.findIndex(p => 
+        typeof p.playerName === 'string' && p.playerName.toLowerCase() === requestedName.toLowerCase()
+      );
+    }
+
+    if (playerIndex === -1) {
+      console.log('❌ Player not found in game:', { userId: req.userId, playerName: requestedName });
+      return res.status(400).json({
+        status: 'error',
+        message: 'You are not in this game'
+      });
+    }
+
+    console.log('✅ Player found at index:', playerIndex);
+
+    // Initialize answers array if not exists
+    if (!Array.isArray(liveGame.players[playerIndex].answers)) {
+      liveGame.players[playerIndex].answers = [];
+    }
+
+    // Check if answer already exists for this question
+    const existingAnswerIndex = liveGame.players[playerIndex].answers.findIndex(ans => 
+      ans.questionId.toString() === questionId
+    );
+
+    if (existingAnswerIndex !== -1) {
+      // Update existing auto-saved answer
+      console.log('✏️ Updating auto-saved answer:', {
+        oldAnswer: liveGame.players[playerIndex].answers[existingAnswerIndex].answer,
+        newAnswer: answer
+      });
+      
+      liveGame.players[playerIndex].answers[existingAnswerIndex].answer = answer;
+      liveGame.players[playerIndex].answers[existingAnswerIndex].autoSaved = true;
+    } else {
+      // Save new answer (without validation, isCorrect will be set on final submit)
+      console.log('➕ Creating new auto-saved answer entry');
+      
+      liveGame.players[playerIndex].answers.push({
+        questionId,
+        answer,
+        autoSaved: true,
+        isCorrect: null,
+        answeredAt: null,
+        timeSpent: null
+      });
+    }
+
+    await liveGame.save();
+
+    console.log('✅ Auto-save successful');
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Answer auto-saved',
+      data: { saved: true }
+    });
+  } catch (error) {
+    console.error('❌ Error in saveAnswer:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -458,6 +608,100 @@ exports.nextQuestion = async (req, res, next) => {
       });
     }
 
+    // Auto-submit all auto-saved answers for current question before moving to next
+    const currentQuestionId = liveGame.quiz.questions[liveGame.currentQuestion]._id;
+    console.log('🔄 Auto-submitting answers for question:', currentQuestionId);
+
+    liveGame.players.forEach((player, playerIndex) => {
+      if (!Array.isArray(player.answers)) return;
+
+      const answerIndex = player.answers.findIndex(ans => 
+        ans.questionId.toString() === currentQuestionId.toString() &&
+        ans.autoSaved === true // Only auto-saved, not yet submitted
+      );
+
+      if (answerIndex !== -1) {
+        const answer = player.answers[answerIndex];
+        const question = liveGame.quiz.questions[liveGame.currentQuestion];
+
+        console.log(`⚡ Auto-submitting for ${player.playerName}:`, answer.answer);
+
+        // Validate answer and calculate score
+        const normalize = (value) => {
+          if (value === undefined || value === null) return '';
+          if (typeof value === 'string') return value.trim().toLowerCase();
+          if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value).trim().toLowerCase();
+          }
+          return value;
+        };
+
+        const isArrayAnswer = Array.isArray(answer.answer);
+        const normalizedAnswerArray = isArrayAnswer
+          ? answer.answer.map(val => normalize(val)).sort()
+          : null;
+        const normalizedAnswerValue = !isArrayAnswer ? normalize(answer.answer) : null;
+
+        let isCorrect = false;
+        const correctAnswer = question.correctAnswer;
+
+        // Empty answer is always wrong
+        const hasNoAnswer = (isArrayAnswer && answer.answer.length === 0) || 
+                            (!isArrayAnswer && (answer.answer === '' || answer.answer === null || answer.answer === undefined));
+        
+        if (hasNoAnswer) {
+          isCorrect = false;
+        } else if (Array.isArray(correctAnswer)) {
+          const correctIsIndices = correctAnswer.every(val => typeof val === 'number');
+          let normalizedCorrectArray;
+          
+          if (correctIsIndices && question.options) {
+            const correctTexts = correctAnswer.map(idx => question.options[idx]).filter(Boolean);
+            normalizedCorrectArray = correctTexts.map(val => normalize(val)).sort();
+          } else {
+            normalizedCorrectArray = correctAnswer.map(val => normalize(val)).sort();
+          }
+
+          if (normalizedAnswerArray) {
+            isCorrect = normalizedAnswerArray.length === normalizedCorrectArray.length &&
+              normalizedAnswerArray.every((val, idx) => val === normalizedCorrectArray[idx]);
+          } else if (normalizedAnswerValue !== null && normalizedAnswerValue !== '') {
+            isCorrect = normalizedCorrectArray.includes(normalizedAnswerValue);
+          }
+        } else {
+          if (typeof correctAnswer === 'number' && question.options && question.options[correctAnswer]) {
+            isCorrect = normalize(question.options[correctAnswer]) === normalizedAnswerValue;
+          } else {
+            isCorrect = normalize(correctAnswer) === normalizedAnswerValue;
+          }
+        }
+
+        // Check accepted answers if available
+        if (!hasNoAnswer && !isCorrect && Array.isArray(question.acceptedAnswers) && question.acceptedAnswers.length > 0) {
+          const normalizedAccepted = question.acceptedAnswers.map(val => normalize(val));
+          if (normalizedAnswerArray) {
+            const acceptedSet = new Set(normalizedAccepted);
+            isCorrect = normalizedAnswerArray.every(val => acceptedSet.has(val));
+          } else if (normalizedAnswerValue !== null) {
+            isCorrect = normalizedAccepted.includes(normalizedAnswerValue);
+          }
+        }
+
+        // Update score if correct
+        if (isCorrect) {
+          liveGame.players[playerIndex].score += (question.points || 1);
+        }
+
+        // Mark as submitted
+        liveGame.players[playerIndex].answers[answerIndex].isCorrect = isCorrect;
+        liveGame.players[playerIndex].answers[answerIndex].answeredAt = new Date();
+        liveGame.players[playerIndex].answers[answerIndex].autoSaved = false;
+        liveGame.players[playerIndex].answers[answerIndex].timeSpent = question.timeLimit || 0;
+
+        console.log(`✅ Auto-submitted: ${player.playerName} - ${isCorrect ? 'Correct' : 'Wrong'} - Score: ${liveGame.players[playerIndex].score}`);
+      }
+    });
+
     const totalQuestions = liveGame.quiz.questions.length;
 
     if (liveGame.currentQuestion >= totalQuestions - 1) {
@@ -473,23 +717,52 @@ exports.nextQuestion = async (req, res, next) => {
             ? player.avatar.emoji
             : (player.avatar || '👤');
 
-          const answersHistory = Array.isArray(player.answers)
-            ? player.answers.map(entry => {
-                // Find question details
-                const question = liveGame.quiz.questions.find(q => 
-                  q._id.toString() === entry.questionId.toString()
-                );
+          // Show ALL questions, not just answered ones
+          const answersHistory = liveGame.quiz.questions.map((question) => {
+            // Find player's answer for this question (if any)
+            const playerAnswer = Array.isArray(player.answers)
+              ? player.answers.find(ans => 
+                  ans.questionId.toString() === question._id.toString() &&
+                  ans.answeredAt && !ans.autoSaved // Only final submissions
+                )
+              : null;
 
-                return {
-                  questionId: entry.questionId,
-                  question: question?.question || 'Unknown question',
-                  userAnswer: Array.isArray(entry.answer) ? entry.answer.join(', ') : entry.answer,
-                  correctAnswer: question?.correctAnswer || null,
-                  isCorrect: entry.isCorrect || false,
-                  timeSpent: entry.timeSpent ?? null
-                };
-              })
-            : [];
+            // Format user answer
+            let userAnswerDisplay = 'No answer';
+            if (playerAnswer && playerAnswer.answer !== undefined && playerAnswer.answer !== null && playerAnswer.answer !== '') {
+              if (Array.isArray(playerAnswer.answer)) {
+                userAnswerDisplay = playerAnswer.answer.length > 0 ? playerAnswer.answer.join(', ') : 'No answer';
+              } else {
+                userAnswerDisplay = String(playerAnswer.answer);
+              }
+            }
+
+            // Format correct answer
+            let correctAnswerDisplay = 'N/A';
+            if (question.correctAnswer !== undefined && question.correctAnswer !== null) {
+              const correctAns = question.correctAnswer;
+              if (Array.isArray(correctAns)) {
+                if (correctAns.every(val => typeof val === 'number') && question.options) {
+                  correctAnswerDisplay = correctAns.map(idx => question.options[idx]).filter(Boolean).join(', ');
+                } else {
+                  correctAnswerDisplay = correctAns.join(', ');
+                }
+              } else if (typeof correctAns === 'number' && question.options && question.options[correctAns]) {
+                correctAnswerDisplay = question.options[correctAns];
+              } else {
+                correctAnswerDisplay = String(correctAns);
+              }
+            }
+
+            return {
+              questionId: question._id,
+              question: question.question || 'Unknown question',
+              userAnswer: userAnswerDisplay,
+              correctAnswer: correctAnswerDisplay,
+              isCorrect: playerAnswer ? (playerAnswer.isCorrect === true) : false,
+              timeSpent: playerAnswer?.timeSpent ?? null
+            };
+          });
 
           return {
             userId: player.userId,
@@ -575,6 +848,99 @@ exports.endGame = async (req, res, next) => {
       });
     }
 
+    // Auto-submit all remaining auto-saved answers before ending game
+    console.log('🔄 Auto-submitting all remaining answers before game end');
+
+    liveGame.players.forEach((player, playerIndex) => {
+      if (!Array.isArray(player.answers)) return;
+
+      player.answers.forEach((answer, answerIndex) => {
+        if (answer.autoSaved === true) {
+          const question = liveGame.quiz.questions.find(q => 
+            q._id.toString() === answer.questionId.toString()
+          );
+
+          if (!question) return;
+
+          console.log(`⚡ Auto-submitting for ${player.playerName}: question ${question.question.substring(0, 30)}...`);
+
+          // Validate answer and calculate score
+          const normalize = (value) => {
+            if (value === undefined || value === null) return '';
+            if (typeof value === 'string') return value.trim().toLowerCase();
+            if (typeof value === 'number' || typeof value === 'boolean') {
+              return String(value).trim().toLowerCase();
+            }
+            return value;
+          };
+
+          const isArrayAnswer = Array.isArray(answer.answer);
+          const normalizedAnswerArray = isArrayAnswer
+            ? answer.answer.map(val => normalize(val)).sort()
+            : null;
+          const normalizedAnswerValue = !isArrayAnswer ? normalize(answer.answer) : null;
+
+          let isCorrect = false;
+          const correctAnswer = question.correctAnswer;
+
+          // Empty answer is always wrong
+          const hasNoAnswer = (isArrayAnswer && answer.answer.length === 0) || 
+                              (!isArrayAnswer && (answer.answer === '' || answer.answer === null || answer.answer === undefined));
+          
+          if (hasNoAnswer) {
+            isCorrect = false;
+          } else if (Array.isArray(correctAnswer)) {
+            const correctIsIndices = correctAnswer.every(val => typeof val === 'number');
+            let normalizedCorrectArray;
+            
+            if (correctIsIndices && question.options) {
+              const correctTexts = correctAnswer.map(idx => question.options[idx]).filter(Boolean);
+              normalizedCorrectArray = correctTexts.map(val => normalize(val)).sort();
+            } else {
+              normalizedCorrectArray = correctAnswer.map(val => normalize(val)).sort();
+            }
+
+            if (normalizedAnswerArray) {
+              isCorrect = normalizedAnswerArray.length === normalizedCorrectArray.length &&
+                normalizedAnswerArray.every((val, idx) => val === normalizedCorrectArray[idx]);
+            } else if (normalizedAnswerValue !== null && normalizedAnswerValue !== '') {
+              isCorrect = normalizedCorrectArray.includes(normalizedAnswerValue);
+            }
+          } else {
+            if (typeof correctAnswer === 'number' && question.options && question.options[correctAnswer]) {
+              isCorrect = normalize(question.options[correctAnswer]) === normalizedAnswerValue;
+            } else {
+              isCorrect = normalize(correctAnswer) === normalizedAnswerValue;
+            }
+          }
+
+          // Check accepted answers if available
+          if (!hasNoAnswer && !isCorrect && Array.isArray(question.acceptedAnswers) && question.acceptedAnswers.length > 0) {
+            const normalizedAccepted = question.acceptedAnswers.map(val => normalize(val));
+            if (normalizedAnswerArray) {
+              const acceptedSet = new Set(normalizedAccepted);
+              isCorrect = normalizedAnswerArray.every(val => acceptedSet.has(val));
+            } else if (normalizedAnswerValue !== null) {
+              isCorrect = normalizedAccepted.includes(normalizedAnswerValue);
+            }
+          }
+
+          // Update score if correct
+          if (isCorrect) {
+            liveGame.players[playerIndex].score += (question.points || 1);
+          }
+
+          // Mark as submitted
+          liveGame.players[playerIndex].answers[answerIndex].isCorrect = isCorrect;
+          liveGame.players[playerIndex].answers[answerIndex].answeredAt = new Date();
+          liveGame.players[playerIndex].answers[answerIndex].autoSaved = false;
+          liveGame.players[playerIndex].answers[answerIndex].timeSpent = question.timeLimit || 0;
+
+          console.log(`✅ Auto-submitted: ${player.playerName} - ${isCorrect ? 'Correct' : 'Wrong'} - Score: ${liveGame.players[playerIndex].score}`);
+        }
+      });
+    });
+
     liveGame.gameStatus = 'ended';
     liveGame.endedAt = new Date();
 
@@ -586,23 +952,52 @@ exports.endGame = async (req, res, next) => {
           ? player.avatar.emoji
           : (player.avatar || '👤');
 
-        const answersHistory = Array.isArray(player.answers)
-          ? player.answers.map(entry => {
-              // Find question details
-              const question = liveGame.quiz.questions.find(q => 
-                q._id.toString() === entry.questionId.toString()
-              );
+        // Show ALL questions, not just answered ones
+        const answersHistory = liveGame.quiz.questions.map((question) => {
+          // Find player's answer for this question (if any)
+          const playerAnswer = Array.isArray(player.answers)
+            ? player.answers.find(ans => 
+                ans.questionId.toString() === question._id.toString() &&
+                ans.answeredAt && !ans.autoSaved // Only final submissions
+              )
+            : null;
 
-              return {
-                questionId: entry.questionId,
-                question: question?.question || 'Unknown question',
-                userAnswer: Array.isArray(entry.answer) ? entry.answer.join(', ') : entry.answer,
-                correctAnswer: question?.correctAnswer || null,
-                isCorrect: entry.isCorrect || false,
-                timeSpent: entry.timeSpent ?? null
-              };
-            })
-          : [];
+          // Format user answer
+          let userAnswerDisplay = 'No answer';
+          if (playerAnswer && playerAnswer.answer !== undefined && playerAnswer.answer !== null && playerAnswer.answer !== '') {
+            if (Array.isArray(playerAnswer.answer)) {
+              userAnswerDisplay = playerAnswer.answer.length > 0 ? playerAnswer.answer.join(', ') : 'No answer';
+            } else {
+              userAnswerDisplay = String(playerAnswer.answer);
+            }
+          }
+
+          // Format correct answer
+          let correctAnswerDisplay = 'N/A';
+          if (question.correctAnswer !== undefined && question.correctAnswer !== null) {
+            const correctAns = question.correctAnswer;
+            if (Array.isArray(correctAns)) {
+              if (correctAns.every(val => typeof val === 'number') && question.options) {
+                correctAnswerDisplay = correctAns.map(idx => question.options[idx]).filter(Boolean).join(', ');
+              } else {
+                correctAnswerDisplay = correctAns.join(', ');
+              }
+            } else if (typeof correctAns === 'number' && question.options && question.options[correctAns]) {
+              correctAnswerDisplay = question.options[correctAns];
+            } else {
+              correctAnswerDisplay = String(correctAns);
+            }
+          }
+
+          return {
+            questionId: question._id,
+            question: question.question || 'Unknown question',
+            userAnswer: userAnswerDisplay,
+            correctAnswer: correctAnswerDisplay,
+            isCorrect: playerAnswer ? (playerAnswer.isCorrect === true) : false,
+            timeSpent: playerAnswer?.timeSpent ?? null
+          };
+        });
 
         return {
           userId: player.userId,
