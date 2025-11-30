@@ -35,6 +35,36 @@ const protect = async (req, res, next) => {
   }
 };
 
+// Optional auth middleware - allows both guest and authenticated users
+const optionalAuth = async (req, res, next) => {
+  let token;
+
+  // Check if token exists in headers
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      // Get token from header
+      token = req.headers.authorization.split(' ')[1];
+
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Get user from token
+      req.user = await User.findById(decoded.id).select('-password');
+
+      if (req.user) {
+        // Set req.userId for controllers
+        req.userId = req.user._id.toString();
+      }
+    } catch (error) {
+      console.error('❌ Optional auth error:', error.message);
+      // Don't block the request, just continue without user
+    }
+  }
+
+  // Continue regardless of whether token was valid or not
+  next();
+};
+
 // Middleware to check if user is admin
 const isAdmin = async (req, res, next) => {
   try {
@@ -55,4 +85,4 @@ const isAdmin = async (req, res, next) => {
   }
 };
 
-module.exports = { protect, isAdmin };
+module.exports = { protect, optionalAuth, isAdmin };

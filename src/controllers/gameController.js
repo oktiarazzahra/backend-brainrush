@@ -65,8 +65,8 @@ exports.createLiveGame = async (req, res, next) => {
 };
 
 // @route   POST /api/games/join
-// @desc    Join live game with PIN
-// @access  Private
+// @desc    Join live game with PIN (guest or logged-in user)
+// @access  Public (optionalAuth)
 exports.joinGame = async (req, res, next) => {
   try {
     const { PIN, playerName, avatar } = req.body;
@@ -112,13 +112,15 @@ exports.joinGame = async (req, res, next) => {
       });
     }
 
-    // Check if player already joined
-    const alreadyJoined = liveGame.players.some(p => p.userId?.toString() === req.userId);
-    if (alreadyJoined) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'You already joined this game'
-      });
+    // Check if player already joined (for logged-in users only)
+    if (req.userId) {
+      const alreadyJoined = liveGame.players.some(p => p.userId?.toString() === req.userId);
+      if (alreadyJoined) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'You already joined this game'
+        });
+      }
     }
 
     // Check max players
@@ -142,13 +144,15 @@ exports.joinGame = async (req, res, next) => {
       return avatar || '👤';
     })();
 
+    // Guest players (no userId) vs Logged-in players (with userId)
     liveGame.players.push({
-      userId: req.userId,
+      userId: req.userId || null, // null for guest players
       playerName: normalizedName,
       avatar: normalizedAvatar,
       score: 0,
       joinedAt: new Date(),
-      answers: []
+      answers: [],
+      isGuest: !req.userId // Mark if player is guest
     });
 
     await liveGame.save();
@@ -162,6 +166,9 @@ exports.joinGame = async (req, res, next) => {
           PIN: liveGame.PIN,
           totalPlayers: liveGame.players.length,
           gameStatus: liveGame.gameStatus
+        },
+        player: {
+          isGuest: !req.userId
         }
       }
     });
@@ -292,11 +299,17 @@ exports.submitAnswer = async (req, res, next) => {
 
     const requestedName = typeof playerName === 'string' ? playerName.trim() : null;
 
-    // Find player by user id first, fallback to player name
-    let playerIndex = liveGame.players.findIndex(p => 
-      p.userId?.toString() === req.userId
-    );
-
+    // Find player by user id first (for logged-in users), fallback to player name (for guests)
+    let playerIndex = -1;
+    
+    if (req.userId) {
+      // For logged-in users, search by userId
+      playerIndex = liveGame.players.findIndex(p => 
+        p.userId?.toString() === req.userId
+      );
+    }
+    
+    // If not found by userId (guest or userId not matched), search by playerName
     if (playerIndex === -1 && requestedName) {
       playerIndex = liveGame.players.findIndex(p => 
         typeof p.playerName === 'string' && p.playerName.toLowerCase() === requestedName.toLowerCase()
@@ -512,11 +525,17 @@ exports.saveAnswer = async (req, res, next) => {
 
     const requestedName = typeof playerName === 'string' ? playerName.trim() : null;
 
-    // Find player
-    let playerIndex = liveGame.players.findIndex(p => 
-      p.userId?.toString() === req.userId
-    );
-
+    // Find player by user id first (for logged-in users), fallback to player name (for guests)
+    let playerIndex = -1;
+    
+    if (req.userId) {
+      // For logged-in users, search by userId
+      playerIndex = liveGame.players.findIndex(p => 
+        p.userId?.toString() === req.userId
+      );
+    }
+    
+    // If not found by userId (guest or userId not matched), search by playerName
     if (playerIndex === -1 && requestedName) {
       playerIndex = liveGame.players.findIndex(p => 
         typeof p.playerName === 'string' && p.playerName.toLowerCase() === requestedName.toLowerCase()

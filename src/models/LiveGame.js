@@ -18,11 +18,18 @@ const liveGameSchema = new mongoose.Schema({
     unique: true
   },
   players: [{
-    userId: mongoose.Schema.Types.ObjectId,
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: false  // Optional for guest players
+    },
     playerName: String,
     avatar: {
       type: mongoose.Schema.Types.Mixed,
       default: '👤'
+    },
+    isGuest: {
+      type: Boolean,
+      default: false
     },
     score: { type: Number, default: 0 },
     joinedAt: { type: Date, default: Date.now },

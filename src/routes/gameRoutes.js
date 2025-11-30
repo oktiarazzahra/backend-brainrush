@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, optionalAuth } = require('../middleware/authMiddleware');
 const {
   createLiveGame,
   joinGame,
@@ -15,16 +15,18 @@ const {
 
 const router = express.Router();
 
-// All routes are protected
+// Routes accessible to both guest and logged-in users
+router.post('/join', optionalAuth, joinGame);
+router.get('/:id', optionalAuth, getGame);
+router.post('/:id/save-answer', optionalAuth, saveAnswer);
+router.post('/:id/answer', optionalAuth, submitAnswer);
+
+// All other routes are protected (require authentication)
 router.use(protect);
 
 router.post('/', createLiveGame);
-router.post('/join', joinGame);
 router.get('/history/user', getUserGameHistory);
-router.get('/:id', getGame);
 router.post('/:id/start', startGame);
-router.post('/:id/save-answer', saveAnswer);
-router.post('/:id/answer', submitAnswer);
 router.post('/:id/next-question', nextQuestion);
 router.post('/:id/end', endGame);
 router.get('/:id/results', getGameResults);
