@@ -14,6 +14,18 @@ const {
   getAllUsers
 } = require('../controllers/authController');
 
+// @route   GET /api/auth/test
+// @desc    Test endpoint for health check
+// @access  Public
+router.get('/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Backend is running!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // @route   POST /api/auth/register
 // @desc    Register a new user and send OTP
 // @access  Public
