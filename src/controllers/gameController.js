@@ -490,6 +490,10 @@ exports.submitAnswer = async (req, res, next) => {
       });
     }
 
+    // Reset questionStartedAt after final submit so next question can start fresh
+    liveGame.players[playerIndex].questionStartedAt = null;
+    console.log('⏰ Reset questionStartedAt after final submit');
+    
     await liveGame.save();
 
     console.log('✅ Answer saved successfully:', {
@@ -610,6 +614,11 @@ exports.saveAnswer = async (req, res, next) => {
         answeredAt: null,
         timeSpent: null
       });
+      
+      // Set questionStartedAt for timer restoration on refresh (per-question mode)
+      // This marks when player started working on this NEW question
+      liveGame.players[playerIndex].questionStartedAt = new Date();
+      console.log('⏰ Set questionStartedAt for player (new question) at:', liveGame.players[playerIndex].questionStartedAt);
     }
 
     await liveGame.save();

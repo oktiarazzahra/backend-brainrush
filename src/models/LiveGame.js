@@ -37,6 +37,7 @@ const liveGameSchema = new mongoose.Schema({
     },
     score: { type: Number, default: 0 },
     joinedAt: { type: Date, default: Date.now },
+    questionStartedAt: { type: Date, default: null }, // Track when player started current question for timer restoration
     answers: [{
       questionId: mongoose.Schema.Types.ObjectId,
       answer: mongoose.Schema.Types.Mixed,
