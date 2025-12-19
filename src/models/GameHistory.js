@@ -34,6 +34,10 @@ const gameHistorySchema = new mongoose.Schema({
   totalPlayers: Number,
   startedAt: Date,
   endedAt: Date,
+  pinDurationHours: {
+    type: Number,
+    default: null // Duration of PIN in hours
+  },
   completedAt: {
     type: Date,
     default: Date.now

@@ -61,6 +61,10 @@ const liveGameSchema = new mongoose.Schema({
   },
   startedAt: Date,
   endedAt: Date,
+  pinDurationHours: {
+    type: Number,
+    default: 8 // Default 8 hours if not specified
+  },
   results: [{
     userId: mongoose.Schema.Types.ObjectId,
     playerName: String,

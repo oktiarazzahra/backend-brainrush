@@ -8,7 +8,7 @@ const generatePIN = require('../utils/generatePIN');
 // @access  Private
 exports.createLiveGame = async (req, res, next) => {
   try {
-    const { quizId } = req.body;
+    const { quizId, pinDurationHours } = req.body;
 
     if (!quizId) {
       return res.status(400).json({
@@ -41,8 +41,14 @@ exports.createLiveGame = async (req, res, next) => {
       PIN: generatePIN(),
       players: [],
       currentQuestion: 0,
-      gameStatus: 'waiting'
+      gameStatus: 'waiting',
+      pinDurationHours: pinDurationHours || 8 // Store PIN duration
     });
+
+    // Set quiz to private when PIN is created
+    // Quiz dengan PIN aktif tidak boleh muncul di daftar public
+    quiz.isPublic = false;
+    await quiz.save();
 
     res.status(201).json({
       status: 'success',
@@ -187,10 +193,9 @@ exports.getGame = async (req, res, next) => {
   try {
     const liveGame = await LiveGame.findById(req.params.id)
       .populate({
-        path: 'quiz',
-        populate: {
-          path: 'questions'
-        }
+        path: 'quiz'
+        // Tidak perlu populate 'questions' karena questions adalah embedded subdocuments
+        // yang sudah otomatis ter-include dalam quiz document
       })
       .populate('players.userId', 'name avatar');
 
@@ -198,6 +203,17 @@ exports.getGame = async (req, res, next) => {
       return res.status(404).json({
         status: 'error',
         message: 'Game not found'
+      });
+    }
+
+    // 🔍 DEBUG: Log quiz timer settings
+    if (liveGame.quiz) {
+      console.log('🎮 getGame - Quiz Timer Settings:', {
+        gameId: req.params.id,
+        quizId: liveGame.quiz._id,
+        timerMode: liveGame.quiz.timerMode,
+        totalTime: liveGame.quiz.totalTime,
+        firstQuestionTimeLimit: liveGame.quiz.questions?.[0]?.timeLimit
       });
     }
 
@@ -963,6 +979,13 @@ exports.endGame = async (req, res, next) => {
     liveGame.gameStatus = 'ended';
     liveGame.endedAt = new Date();
 
+    // Set quiz back to public when game ends
+    // Quiz kembali muncul di daftar public setelah PIN kadaluarsa/dibatalkan
+    if (liveGame.quiz && liveGame.quiz.isPublished) {
+      liveGame.quiz.isPublic = true;
+      await liveGame.quiz.save();
+    }
+
     // Rank players
     const rankedPlayers = [...liveGame.players]
       .sort((a, b) => b.score - a.score)
@@ -1037,7 +1060,8 @@ exports.endGame = async (req, res, next) => {
       playerResults: rankedPlayers,
       totalPlayers: liveGame.players.length,
       startedAt: liveGame.startedAt,
-      endedAt: liveGame.endedAt
+      endedAt: liveGame.endedAt,
+      pinDurationHours: liveGame.pinDurationHours || 8 // Save PIN duration
     });
 
     await liveGame.save();
@@ -1101,7 +1125,7 @@ exports.getUserGameHistory = async (req, res, next) => {
     const playerGames = await GameHistory.find({
       'playerResults.userId': req.userId
     })
-      .populate('quizId', 'title category coverImage')
+      .populate('quizId', 'title category coverImage questions')
       .populate('hostId', 'name')
       .sort({ completedAt: -1 });
 
@@ -1109,7 +1133,7 @@ exports.getUserGameHistory = async (req, res, next) => {
     const hostGames = await GameHistory.find({
       hostId: req.userId
     })
-      .populate('quizId', 'title category coverImage')
+      .populate('quizId', 'title category coverImage questions')
       .sort({ completedAt: -1 });
 
     // Process player games to include user's rank and score
@@ -1125,14 +1149,15 @@ exports.getUserGameHistory = async (req, res, next) => {
         coverImage: game.quizId?.coverImage,
         date: game.completedAt,
         players: game.totalPlayers,
+        totalQuestions: game.quizId?.questions?.length || 0,
         yourRank: userResult?.rank || 0,
         yourScore: userResult?.score || 0,
         topScore: game.playerResults[0]?.score || 0,
         avgScore: Math.round(
           game.playerResults.reduce((sum, p) => sum + (p.score || 0), 0) / game.playerResults.length
         ),
-        duration: game.endedAt && game.startedAt 
-          ? Math.round((new Date(game.endedAt) - new Date(game.startedAt)) / 60000) + ' menit'
+        duration: game.pinDurationHours 
+          ? `${game.pinDurationHours} jam`
           : 'N/A',
         PIN: game.PIN,
         role: 'player'
@@ -1148,12 +1173,13 @@ exports.getUserGameHistory = async (req, res, next) => {
         coverImage: game.quizId?.coverImage,
         date: game.completedAt,
         players: game.totalPlayers,
+        totalQuestions: game.quizId?.questions?.length || 0,
         topScore: game.playerResults[0]?.score || 0,
         avgScore: Math.round(
           game.playerResults.reduce((sum, p) => sum + (p.score || 0), 0) / game.playerResults.length
         ),
-        duration: game.endedAt && game.startedAt 
-          ? Math.round((new Date(game.endedAt) - new Date(game.startedAt)) / 60000) + ' menit'
+        duration: game.pinDurationHours 
+          ? `${game.pinDurationHours} jam`
           : 'N/A',
         PIN: game.PIN,
         role: 'host'
