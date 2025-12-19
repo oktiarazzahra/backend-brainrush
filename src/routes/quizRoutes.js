@@ -41,9 +41,20 @@ router.get('/published', protect, async (req, res) => {
       isPublished: true,
       isPublic: true
     })
-      .populate('createdBy', 'name email')
+      .populate('createdBy', 'name email fullName')
       .sort({ createdAt: -1 });
-    res.json({ quizzes });
+    
+    // Ensure createdBy is populated with name
+    const enrichedQuizzes = quizzes.map(quiz => {
+      const quizObj = quiz.toObject();
+      if (quizObj.createdBy) {
+        // Use fullName or name, whichever is available
+        quizObj.createdBy.name = quizObj.createdBy.fullName || quizObj.createdBy.name || 'Anonymous';
+      }
+      return quizObj;
+    });
+    
+    res.json({ quizzes: enrichedQuizzes });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
