@@ -999,10 +999,14 @@ exports.endGame = async (req, res, next) => {
     liveGame.gameStatus = 'ended';
     liveGame.endedAt = new Date();
 
-    // Set quiz back to public when game ends
+    // Set quiz back to public when game ends AND clear active PIN data
     // Quiz kembali muncul di daftar public setelah PIN kadaluarsa/dibatalkan
     if (liveGame.quiz && liveGame.quiz.isPublished) {
       liveGame.quiz.isPublic = true;
+      // Clear active PIN data so monitoring button disappears
+      liveGame.quiz.activePIN = null;
+      liveGame.quiz.pinExpiresAt = null;
+      liveGame.quiz.activeGameId = null;
       await liveGame.quiz.save();
     }
 
