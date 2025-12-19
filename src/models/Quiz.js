@@ -115,6 +115,20 @@ const quizSchema = new mongoose.Schema(
       type: Number,
       default: null, // Total time in seconds for 'total-time' mode
     },
+    // Active PIN fields for live games
+    activePIN: {
+      type: String,
+      default: null,
+    },
+    pinExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    activeGameId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'LiveGame',
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -8,7 +8,7 @@ const generatePIN = require('../utils/generatePIN');
 // @access  Private
 exports.createLiveGame = async (req, res, next) => {
   try {
-    const { quizId, pinDurationHours } = req.body;
+    const { quizId, pinDurationHours = 8 } = req.body;
 
     if (!quizId) {
       return res.status(400).json({
@@ -35,19 +35,29 @@ exports.createLiveGame = async (req, res, next) => {
       });
     }
 
+    // Generate PIN and calculate expiry time
+    const PIN = generatePIN();
+    const pinExpiresAt = new Date();
+    pinExpiresAt.setHours(pinExpiresAt.getHours() + pinDurationHours);
+
+    // Create live game
     const liveGame = await LiveGame.create({
       quiz: quizId,
       host: req.userId,
-      PIN: generatePIN(),
+      PIN: PIN,
+      pinExpiresAt: pinExpiresAt,
       players: [],
       currentQuestion: 0,
       gameStatus: 'waiting',
-      pinDurationHours: pinDurationHours || 8 // Store PIN duration
+      pinDurationHours: pinDurationHours
     });
 
-    // Set quiz to private when PIN is created
+    // Set quiz to private when PIN is created & update quiz with active PIN info
     // Quiz dengan PIN aktif tidak boleh muncul di daftar public
     quiz.isPublic = false;
+    quiz.activePIN = PIN;
+    quiz.pinExpiresAt = pinExpiresAt;
+    quiz.activeGameId = liveGame._id;
     await quiz.save();
 
     res.status(201).json({
@@ -57,6 +67,7 @@ exports.createLiveGame = async (req, res, next) => {
         game: {
           id: liveGame._id,
           PIN: liveGame.PIN,
+          pinExpiresAt: liveGame.pinExpiresAt,
           quizTitle: quiz.title,
           totalQuestions: quiz.questions.length
         }

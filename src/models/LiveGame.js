@@ -17,6 +17,10 @@ const liveGameSchema = new mongoose.Schema({
     default: generatePIN,
     unique: true
   },
+  pinExpiresAt: {
+    type: Date,
+    default: null
+  },
   players: [{
     userId: {
       type: mongoose.Schema.Types.ObjectId,
