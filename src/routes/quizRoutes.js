@@ -75,8 +75,11 @@ router.get('/my-quizzes', protect, async (req, res) => {
       { $set: { isPublic: true } }
     );
     
-    // Fetch updated quizzes
-    const quizzes = await Quiz.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
+    // Fetch updated quizzes with creator info populated
+    const quizzes = await Quiz.find({ createdBy: req.user._id })
+      .populate('createdBy', 'name email fullName')
+      .sort({ createdAt: -1 });
+    
     res.json({ quizzes });
   } catch (error) {
     console.error('❌ Get quizzes error:', error);

@@ -93,7 +93,8 @@ exports.createQuiz = async (req, res, next) => {
 exports.getMyQuizzes = async (req, res, next) => {
   try {
     const quizzes = await Quiz.find({ createdBy: req.userId })
-      .select('title description category status questions createdAt coverImage quizType timerMode totalTime')
+      .populate('createdBy', 'name fullName email') // Populate creator info
+      .select('title description category status questions createdAt coverImage quizType timerMode totalTime createdBy')
       .sort('-createdAt');
 
     return res.status(200).json({
