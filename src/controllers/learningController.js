@@ -118,12 +118,13 @@ exports.submitLearning = async (req, res, next) => {
       // Check answer based on question type
       if (questionType === 'multiple-choice' || questionType === 'multiple-answer' || questionType === 'Pilihan Ganda') {
         // For multiple choice/answer questions
+        // Normalize to arrays for comparison
         const correctAnswer = Array.isArray(question.correctAnswer) ? question.correctAnswer : [question.correctAnswer];
         const userAnswer = Array.isArray(answer.answer) ? answer.answer : [answer.answer];
         
         // Sort arrays for comparison
-        const sortedCorrect = [...correctAnswer].sort();
-        const sortedUser = [...userAnswer].sort();
+        const sortedCorrect = [...correctAnswer].map(a => Number(a)).sort();
+        const sortedUser = [...userAnswer].map(a => Number(a)).sort();
         
         console.log('Comparing arrays:', { sortedCorrect, sortedUser });
         
