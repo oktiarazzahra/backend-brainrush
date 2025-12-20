@@ -130,7 +130,7 @@ exports.submitLearning = async (req, res, next) => {
         
         isCorrect = JSON.stringify(sortedCorrect) === JSON.stringify(sortedUser);
       } else if (questionType === 'true-false' || questionType === 'Benar Salah') {
-        // For true/false questions - handle both string and boolean
+        // For true/false questions - handle both string and boolean + Indonesian language
         console.log('Comparing bool:', { correct: question.correctAnswer, user: answer.answer, types: [typeof question.correctAnswer, typeof answer.answer] });
         
         // PENTING: Jika tidak dijawab (null/undefined), otomatis salah
@@ -138,13 +138,19 @@ exports.submitLearning = async (req, res, next) => {
           isCorrect = false;
           console.log('Not answered - marked as wrong');
         } else {
-          // Convert to boolean for comparison
-          const correctBool = question.correctAnswer === true || question.correctAnswer === 'true';
-          const userBool = answer.answer === true || answer.answer === 'true';
+          // Normalize function for True/False mapping
+          const normalizeBoolean = (value) => {
+            if (value === true || value === 'true' || value === 'True' || value === 'benar' || value === 'Benar') return 'true';
+            if (value === false || value === 'false' || value === 'False' || value === 'salah' || value === 'Salah') return 'false';
+            return String(value).toLowerCase();
+          };
           
-          console.log('After conversion:', { correctBool, userBool });
+          const correctNormalized = normalizeBoolean(question.correctAnswer);
+          const userNormalized = normalizeBoolean(answer.answer);
           
-          isCorrect = correctBool === userBool;
+          console.log('After normalization:', { correctNormalized, userNormalized });
+          
+          isCorrect = correctNormalized === userNormalized;
         }
       } else if (questionType === 'short-answer' || questionType === 'Isian') {
         // For short answer questions - case insensitive

@@ -365,7 +365,13 @@ exports.submitAnswer = async (req, res, next) => {
     // Check if answer is correct
     const normalize = (value) => {
       if (value === undefined || value === null) return '';
-      if (typeof value === 'string') return value.trim().toLowerCase();
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        // Map True/False <-> Benar/Salah for compatibility
+        if (normalized === 'true' || normalized === 'benar') return 'true';
+        if (normalized === 'false' || normalized === 'salah') return 'false';
+        return normalized;
+      }
       if (typeof value === 'number' || typeof value === 'boolean') {
         return String(value).trim().toLowerCase();
       }
@@ -684,7 +690,13 @@ exports.nextQuestion = async (req, res, next) => {
         // Validate answer and calculate score
         const normalize = (value) => {
           if (value === undefined || value === null) return '';
-          if (typeof value === 'string') return value.trim().toLowerCase();
+          if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            // Map True/False <-> Benar/Salah for compatibility
+            if (normalized === 'true' || normalized === 'benar') return 'true';
+            if (normalized === 'false' || normalized === 'salah') return 'false';
+            return normalized;
+          }
           if (typeof value === 'number' || typeof value === 'boolean') {
             return String(value).trim().toLowerCase();
           }
@@ -922,7 +934,13 @@ exports.endGame = async (req, res, next) => {
           // Validate answer and calculate score
           const normalize = (value) => {
             if (value === undefined || value === null) return '';
-            if (typeof value === 'string') return value.trim().toLowerCase();
+            if (typeof value === 'string') {
+              const normalized = value.trim().toLowerCase();
+              // Map True/False <-> Benar/Salah for compatibility
+              if (normalized === 'true' || normalized === 'benar') return 'true';
+              if (normalized === 'false' || normalized === 'salah') return 'false';
+              return normalized;
+            }
             if (typeof value === 'number' || typeof value === 'boolean') {
               return String(value).trim().toLowerCase();
             }
