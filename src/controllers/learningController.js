@@ -155,13 +155,36 @@ exports.submitLearning = async (req, res, next) => {
       } else if (questionType === 'short-answer' || questionType === 'Isian') {
         // For short answer questions - case insensitive
         const acceptedAnswers = question.acceptedAnswers || [];
-        const userAnswerLower = (answer.answer || '').toString().toLowerCase().trim();
+        const userAnswerRaw = answer.answer;
         
-        console.log('Comparing text:', { acceptedAnswers, userAnswerLower });
+        console.log('📝 Short answer check:', { 
+          userAnswerRaw, 
+          type: typeof userAnswerRaw,
+          acceptedAnswers 
+        });
         
-        isCorrect = acceptedAnswers.some(accepted => 
-          accepted.toLowerCase().trim() === userAnswerLower
-        );
+        // PENTING: Cek apakah benar-benar dijawab (bukan empty string atau null)
+        if (!userAnswerRaw || 
+            (typeof userAnswerRaw === 'string' && userAnswerRaw.trim() === '')) {
+          isCorrect = false;
+          console.log('❌ Short answer: Empty or not answered');
+        } else {
+          const userAnswerLower = userAnswerRaw.toString().toLowerCase().trim();
+          
+          console.log('Comparing text (normalized):', { 
+            acceptedAnswers: acceptedAnswers.map(a => a.toLowerCase().trim()), 
+            userAnswerLower 
+          });
+          
+          if (acceptedAnswers.length === 0) {
+            console.log('⚠️ No accepted answers defined for this question');
+            isCorrect = false;
+          } else {
+            isCorrect = acceptedAnswers.some(accepted => 
+              accepted.toLowerCase().trim() === userAnswerLower
+            );
+          }
+        }
       } else {
         // Default comparison
         console.log('Default comparison:', { correct: question.correctAnswer, user: answer.answer });
