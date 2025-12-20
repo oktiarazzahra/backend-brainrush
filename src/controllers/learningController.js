@@ -241,7 +241,8 @@ exports.submitLearning = async (req, res, next) => {
         answers: answersDetails,
         isCompleted: true,
         totalQuestions: quiz.questions.length,
-        currentQuestionIndex: quiz.questions.length
+        currentQuestionIndex: quiz.questions.length,
+        completedAt: new Date() // IMPORTANT: Set completion timestamp
       });
       console.log('✅ Saved successfully with ID:', playerScore._id);
     }
