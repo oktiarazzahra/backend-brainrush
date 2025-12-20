@@ -224,8 +224,7 @@ exports.submitLearning = async (req, res, next) => {
           totalPoints,
           answers: answersDetails,
           isCompleted: true,
-          currentQuestionIndex: quiz.questions.length,
-          completedAt: new Date()
+          currentQuestionIndex: quiz.questions.length
         },
         { new: true }
       );
@@ -241,8 +240,7 @@ exports.submitLearning = async (req, res, next) => {
         answers: answersDetails,
         isCompleted: true,
         totalQuestions: quiz.questions.length,
-        currentQuestionIndex: quiz.questions.length,
-        completedAt: new Date() // IMPORTANT: Set completion timestamp
+        currentQuestionIndex: quiz.questions.length
       });
       console.log('✅ Saved successfully with ID:', playerScore._id);
     }
