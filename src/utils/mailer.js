@@ -1,46 +1,30 @@
 const nodemailer = require('nodemailer');
 
-// Create transporter based on service (Resend or standard SMTP)
-let transporter;
+// Create SMTP transporter
+// Supports Gmail, Outlook, or custom SMTP server
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: false, // true for 465, false for other ports (587 uses STARTTLS)
+  auth: {
+    user: process.env.SMTP_USER, // Email address (e.g., youremail@gmail.com)
+    pass: process.env.SMTP_PASS  // App password (NOT your regular Gmail password)
+  },
+  tls: {
+    rejectUnauthorized: false // Accept self-signed certificates
+  }
+});
 
-if (process.env.SMTP_SERVICE === 'resend' && process.env.RESEND_API_KEY) {
-  // Resend SMTP (recommended for Railway production)
-  transporter = nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: 'resend',
-      pass: process.env.RESEND_API_KEY
-    }
-  });
-  console.log('✅ Using Resend SMTP for email delivery');
-} else {
-  // Standard SMTP (Gmail, Outlook, etc.)
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-  
-  // Verify connection on startup
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ SMTP connection error:', error.message);
-      console.error('⚠️  Make sure SMTP credentials are configured correctly in .env file');
-    } else {
-      console.log('✅ SMTP Server ready to send emails');
-      console.log(`📧 Using: ${process.env.SMTP_USER || 'No email configured'}`);
-    }
-  });
-}
+// Verify connection on startup
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP connection error:', error.message);
+    console.error('⚠️  Make sure SMTP credentials are configured correctly in .env file');
+  } else {
+    console.log('✅ SMTP Server ready to send emails');
+    console.log(`📧 Using: ${process.env.SMTP_USER || 'No email configured'}`);
+  }
+});
 
 /**
  * Send email
