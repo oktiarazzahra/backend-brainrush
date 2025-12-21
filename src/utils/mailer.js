@@ -53,7 +53,7 @@ if (process.env.SMTP_SERVICE === 'resend' && process.env.RESEND_API_KEY) {
 const sendMail = async ({ to, subject, text, html }) => {
   try {
     const mailOptions = {
-      from: `${process.env.FROM_NAME || 'Brain Rush'} <${process.env.EMAIL_FROM || process.env.SMTP_USER}>`,
+      from: `${process.env.FROM_NAME || 'Brain Rush'} <${process.env.FROM_EMAIL || process.env.SMTP_USER}>`,
       to,
       subject,
       text,
