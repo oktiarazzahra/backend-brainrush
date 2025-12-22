@@ -27,6 +27,22 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  age: {
+    type: String,
+    default: ''
+  },
+  phone: {
+    type: String,
+    default: ''
+  },
+  bio: {
+    type: String,
+    default: ''
+  },
+  school: {
+    type: String,
+    default: ''
+  },
   totalGamesPlayed: {
     type: Number,
     default: 0

@@ -502,7 +502,7 @@ exports.getMe = async (req, res, next) => {
 // @access  Private
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { name, avatar } = req.body;
+    const { name, avatar, age, phone, bio, school } = req.body;
 
     const user = await User.findById(req.user._id);
 
@@ -516,6 +516,10 @@ exports.updateProfile = async (req, res, next) => {
     // Update fields
     if (name) user.name = name;
     if (avatar !== undefined) user.avatar = avatar;
+    if (age !== undefined) user.age = age;
+    if (phone !== undefined) user.phone = phone;
+    if (bio !== undefined) user.bio = bio;
+    if (school !== undefined) user.school = school;
 
     await user.save();
 
